@@ -1,6 +1,11 @@
+activate:
+  default: True
+  type_as: [True]
+
 nevt_sig:
   default: 1000
   type_as: [42]
+
 nevt_bkg:
   default: 1000
   type_as: [42]
@@ -20,12 +25,12 @@ usefileserver:
   default: False
 
 binmin:
-  default: 2
-  type_as: [42., 42]
+  default: [6,8]
+  type_as: [[]]
 
 binmax:
-  default: 4
-  type_as: [42., 42]
+  default: [8,10]
+  type_as: [[]]
 
 test_frac:
   default: 0.2
@@ -121,6 +126,10 @@ dogridsearch:
 
 dosignifopt:
   default: False
+  type_as: [True]
+
+usefileserver:
+  default: false
   type_as: [True]
 
 # This configuration defaults are filled on the dly from the models database

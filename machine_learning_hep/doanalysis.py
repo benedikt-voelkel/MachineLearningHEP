@@ -27,9 +27,31 @@ from machine_learning_hep.listfiles import list_files_dir_lev2
 from machine_learning_hep.skimming import create_inv_mass
 #from machine_learning_hep.skimming import plothisto
 #from machine_learning_hep.fit import fitmass, plot_graph_yield
+from machine_learning_hep.config import Configuration
 
 # pylint: disable=too-many-locals, too-many-statements, too-many-branches
 def doanalysis(data_config, data, case, useml):
+
+    # Extracting old part of config from large data_config
+    ml_study_config = data_config["ml_study"]
+    conf = Configuration(run_config_input=ml_study_config)
+    conf.configure()
+    run_config = conf.get_run_config()
+    model_config = conf.get_model_config()
+
+    ###################################
+    # Now you can use the conf as before the commit
+    # "Unify skimming, optimization and analysis in a single script (#89)"
+    ###################################
+    # e.g.
+    # ml_study_activate = run_config["activate"]
+    # dogridsearch = run_config['dogridsearch']
+
+    # The classifiers
+    # classifiers_scikit, names_scikit = getclf_scikit(model_config)
+    # classifiers_xgboost, names_xgboost = getclf_xgboost(model_config)
+    # classifiers_keras, names_keras = getclf_keras(model_config, len(x_train.columns))
+
 
     var_pt = data[case]["variables"]["var_binning"]
     fileinputdir = data[case]["output_folders"]["pkl_skimmed"]["data"]
