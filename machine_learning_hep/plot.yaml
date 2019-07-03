@@ -1,0 +1,22 @@
+multiplicity_pt:
+    observable:
+        tree: PWGHF_TreeCreator/tree_event_char
+        name: z_vtx_reco #n_tracklets
+    cut:
+        tree: PWGHF_TreeCreator/tree_Lc2V0bachelor
+        required_branches: [pt_cand]
+        expression: "pt_cand > 1. and pt_cand < 3."
+    match_branch: ev_id
+    bins: 50
+    range: [-20, 20]
+pt:
+    observable:
+        tree: PWGHF_TreeCreator/tree_Lc2V0bachelor
+        name: pt_cand
+    cut:
+        tree: PWGHF_TreeCreator/tree_Lc2V0bachelor
+        required_branches: [pt_cand]
+        expression: "pt_cand > 1. and pt_cand < 3."
+    bins: 50
+    range: [0, 4]
+
