@@ -1,22 +1,41 @@
-multiplicity_pt:
-    observable:
-        tree: PWGHF_TreeCreator/tree_event_char
-        name: z_vtx_reco #n_tracklets
-    cut:
-        tree: PWGHF_TreeCreator/tree_Lc2V0bachelor
-        required_branches: [pt_cand]
-        expression: "pt_cand > 1. and pt_cand < 3."
-    match_branch: ev_id
-    bins: 50
-    range: [-20, 20]
-pt:
-    observable:
-        tree: PWGHF_TreeCreator/tree_Lc2V0bachelor
-        name: pt_cand
-    cut:
-        tree: PWGHF_TreeCreator/tree_Lc2V0bachelor
-        required_branches: [pt_cand]
-        expression: "pt_cand > 1. and pt_cand < 3."
-    bins: 50
-    range: [0, 4]
+tree_matches:
+    - trees: [ PWGHF_TreeCreator/tree_Lc2V0bachelor, PWGHF_TreeCreator/tree_event_char ]
+      common_branch: ev_id
 
+
+cuts:
+  pt_cand_low:
+    tree: PWGHF_TreeCreator/tree_Lc2V0bachelor
+    required_branches:
+      - pt_cand
+    expression: "pt_cand > 1. and pt_cand < 3."
+  pt_cand_high:
+    tree: PWGHF_TreeCreator/tree_Lc2V0bachelor
+    required_branches:
+      - pt_cand
+    expression: "pt_cand > 4. and pt_cand < 6."
+
+
+plots:
+  - tree: PWGHF_TreeCreator/tree_event_char
+    observables:
+      - name: z_vtx_reco
+        range: [-20,20]
+        bins: 50
+        cuts:
+          - pt_cand_low
+      - name: n_tracklets
+        range: [0,140]
+        bins: 50
+        cuts:
+          - pt_cand_low
+          - pt_cand_high
+
+  - tree: PWGHF_TreeCreator/tree_Lc2V0bachelor
+    observables:
+      - name: pt_cand
+        range: [0,10]
+        bins: 50
+        cuts:
+          - pt_cand_low
+          - null
