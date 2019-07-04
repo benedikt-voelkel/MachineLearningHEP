@@ -19,34 +19,61 @@ class Histo1D:
     def add_values(self, values, weights=None):
         self.hist += np.histogram(values, self.bins, self.axis_range, None, weights)[0]
 
+    def get_statistics(self):
+        return [ ("bin_" + str(i + 1), self.edges[i], self.edges[i+1], self.hist[i]) for i in range(len(self.hist)) ]
 
-def plot1D(histograms, plot_name, output_dir="./"):
 
-        logger = get_logger()
-        try:
-            it = iter(histograms)
-        except TypeError as te:
-            histograms = [histograms]
 
-        output_dir = os.path.expanduser(output_dir)
-        fig = plt.figure()
-        ax = fig.add_subplot()
-        # Derive bin centers from edges of first histogram
-        common_edges = histograms[0].edges
-        bin_widths = [ 0.9 * (common_edges[i+1] - common_edges[i] ) for i in range(len(common_edges) - 1) ]
-        bin_centers = [ (common_edges[i+1] + common_edges[i]) / 2 for i in range(len(common_edges) - 1) ]
-        for h in histograms:
-            if not np.array_equal(h.edges,common_edges):
-                logger_string = f"Incompatible edges found in histogram {h.name}"
-                logger.fatal(logger_string)
-            ax.bar(bin_centers, h.hist, width=bin_widths, alpha=0.7, label=h.label)
-        output_png = os.path.join(output_dir, plot_name + ".png")
-        #output_eps = os.path.join(output_dir, plot_name + ".eps")
-        logger_string = f"Save histogram {plot_name} in directory {output_dir}"
-        logger.info(logger_string)
-        plt.savefig(output_png)
-        #plt.savefig(output_eps)
+def plot1D(histograms, plot_name, output_dir="./", stacked=False):
 
+    logger = get_logger()
+    try:
+        it = iter(histograms)
+    except TypeError as te:
+        histograms = [histograms]
+
+    output_dir = os.path.expanduser(output_dir)
+    fig = plt.figure()
+    ax = fig.add_subplot()
+    # Derive bin centers from edges of first histogram
+    common_edges = histograms[0].edges
+    bin_widths = [ 0.9 * (common_edges[i+1] - common_edges[i] ) for i in range(len(common_edges) - 1) ]
+    bin_centers = [ (common_edges[i+1] + common_edges[i]) / 2 for i in range(len(common_edges) - 1) ]
+    new_bottom = np.zeros(len(histograms[0].hist))
+    for h in histograms:
+        if not np.array_equal(h.edges,common_edges):
+            logger_string = f"Incompatible edges found in histogram {h.name}"
+            logger.fatal(logger_string)
+        ax.bar(bin_centers, h.hist, width=bin_widths, alpha=0.7, label=h.label, bottom=new_bottom)
+        if stacked:
+            new_bottom += h.hist
+    ax.legend()
+    output_png = os.path.join(output_dir, plot_name + ".png")
+    #output_eps = os.path.join(output_dir, plot_name + ".eps")
+    logger_string = f"Save histogram {plot_name} in directory {output_dir}"
+    logger.info(logger_string)
+    plt.savefig(output_png)
+    #plt.savefig(output_eps)
+
+def save_statistics(histograms, output_dir = "./"):
+
+    logger = get_logger()
+    try:
+        it = iter(histograms)
+    except TypeError as te:
+        histograms = [histograms]
+
+    for h in histograms:
+        output_path = os.path.join(output_dir, h.name + "_stats.dat")
+        with open(output_path, "w") as f:
+            stats = h.get_statistics()
+            f.write(f"Histogram name: {h.name}\n")
+            f.write(f"Histogram label: {h.label}\n")
+            f.write(f"Statistics\n")
+            f.write(f"Bin name, lower edge, upper edge, weight\n")
+            for s in stats:
+                line = str(s[0]) + " " + str(s[1]) + " " + str(s[2]) + " " + str(s[3]) + "\n"
+                f.write(line)
 
 def process(top_dir, file_signature, recursive, n_files, plot_config, output_dir):
     top_dir = os.path.expanduser(top_dir)
@@ -151,7 +178,9 @@ def process(top_dir, file_signature, recursive, n_files, plot_config, output_dir
 
     for h_name, histos in histograms.items():
         histo_list = [ v for v in histos.values() ]
-        plot1D(histo_list, h_name)
+        plot1D(histo_list, h_name, stacked=True)
+        save_statistics(histo_list)
+
     exit(0)
 
 

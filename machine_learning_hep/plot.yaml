@@ -14,6 +14,11 @@ cuts:
     required_branches:
       - pt_cand
     expression: "pt_cand > 4. and pt_cand < 6."
+  pt_cand_medium:
+    tree: PWGHF_TreeCreator/tree_Lc2V0bachelor
+    required_branches:
+      - pt_cand
+    expression: "pt_cand > 2. and pt_cand < 5."
 
 
 plots:
@@ -30,6 +35,7 @@ plots:
         cuts:
           - pt_cand_low
           - pt_cand_high
+          - pt_cand_medium
 
   - tree: PWGHF_TreeCreator/tree_Lc2V0bachelor
     observables:
