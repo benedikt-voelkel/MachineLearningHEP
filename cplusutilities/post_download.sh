@@ -4,9 +4,10 @@ function packing()
 {
     local output_dir="$1"
     local file_pack="$2"
+    local logfile="$3"
     echo "===> Write pack to $output_dir"
     mkdir -p $output_dir
-    hadd $output_dir/AnalysisResults.root $file_pack
+    hadd $output_dir/AnalysisResults.root $file_pack > $logfile 2>&1
 }
 
 function n_job_delay()
@@ -29,7 +30,8 @@ function n_job_delay()
 STREAM_START_RED="\033[0;31m"
 STREAM_START_GREEN="\033[0;32m"
 STREAM_START_YELLOW="\033[0;33m"
-STREAM_END_COLOR="\033[0m"
+STREAM_START_BOLD="\033[1m"
+STREAM_END_FORMAT="\033[0m"
 
 # Top directory where pointing down to the train number
 # In that directory the further structure then should be
@@ -39,25 +41,95 @@ INPUT_PATH="$1"
 # We start from here
 CURR_DIR=$(pwd)
 
+# To do some logging
+LOG_DIR=/tmp/ML/train_post_download
+
 # Normal upper bound for merged files
 TARGET_PACK_SIZE="1000000"
 
 # Accepted size if one input file is already bigger
 MAX_ACCEPTED_INPUT_SIZE="5000000"
 # Number of those
-MAX_ACCEPTED_BIG_INPUT="25"
+MAX_ACCEPTED_BIG_INPUT="45"
 
 # Number of packing jobs
-N_PACKING_JOBS=28
+N_PACKING_JOBS=20
 
 MERGED_DIR="merged"
 
+function print_usage()
+{
+    echo -e "Usage: post_download \n" \
+                                   "[[ [-i | --input <input_directory> top directory where \"unmerged\" directory can be found] \n" \
+                                   "   [-s | --target-size <size> target size in kB]\n" \
+                                   "   [-m | --max-input-size <max_input_size> in case input file might be bigger that target size]\n" \
+                                   "   [-n | --n-max-size <n_max_size> number of big files accepted]\n" \
+                                   "   [-j | --jobs <n_jobs> number of ROOT \"hadd\" jobs]]\n" \
+                                   " | [-h | --help print this help message and exit]]"
+}
+
+function check_settings()
+{
+    [[ "$INPUT_PATH" == "" ]] && { echo -e "${STREAM_START_RED}ERROR:${STREAM_END_FORMAT} Input file required"; exit 1; }
+    echo -e "${STREAM_START_BOLD}Settings chosen${STREAM_END_FORMAT}\n" \
+            "input path $INPUT_PATH \n" \
+            "target size: $TARGET_PACK_SIZE kB \n" \
+            "maximum accepted input size: $MAX_ACCEPTED_INPUT_SIZE kB\n" \
+            "number of big files accepted: $MAX_ACCEPTED_BIG_INPUT \n" \
+            "number of jobs: $N_PACKING_JOBS \n"
+
+    echo -e "${STREAM_START_BOLD}Do you agree with these settings? [y/n]${STREAM_END_FORMAT}"
+    read answer
+    if [[ "$answer" != "Y" && "$answer" != "y" ]]
+    then
+        echo "Abort, you were not satisfied apparently. Set your desired values and start again. If you need help, use \"--help\" flag."
+        exit 0
+    fi
+}
+
+# Command line arguments
+while [ "$1" != "" ]
+do
+    case $1 in
+        -i | --input )              shift
+                                    INPUT_PATH="$1"
+                                    ;;
+        -s | --target-size )        shift
+                                    TARGET_PACK_SIZE="$1"
+                                    ;;
+        -m | --max-input-size )     shift
+                                    MAX_ACCEPTED_INPUT_SIZE="$1"
+                                    ;;
+        -n | --n-max-size )         shift
+                                    MAX_ACCEPTED_BIG_INPUT="$1"
+                                    ;;
+        -j | --jobs )               shift
+                                    N_PACKING_JOBS="$1"
+                                    ;;
+        -h | --help )               shift
+                                    print_usage
+                                    exit 0
+                                    ;;
+        * )                         shift
+                                    echo -e "${STREAM_START_RED}ERROR:${STREAM_END_FORMAT} Unknown argument $1"
+                                    print_usage
+                                    exit 0
+                                    ;;
+    esac
+    shift
+done
+
+check_settings
+                           
 echo "#####"
 echo "#####"
 echo "MERGING GRID DATA up to target file size of $TARGET_PACK_SIZE kB"
 echo "#####"
 echo "#####"
 echo
+
+
+exit 0
 
 [[ ! -d $INPUT_PATH ]] && { echo "$INPUT_PATH is no directory"; return 1; }
 
@@ -68,7 +140,7 @@ INPUT_PATH=$(realpath $INPUT_PATH)
 cd $INPUT_PATH
 
 # check for unmerged directory
-[[ ! -d "./unmerged" ]] && { echo -e "${STREAM_START_RED}ERROR${STREAM_END_COLOR}: Cannot find unmgered directory"; exit 1; }
+[[ ! -d "./unmerged" ]] && { echo -e "${STREAM_START_RED}ERROR${STREAM_END_FORMAT}: Cannot find unmgered directory"; exit 1; }
 
 # keep the old data savely and produce the merged data as well. This assumes
 # there is nothing but the ROOT data from the grid
@@ -77,13 +149,18 @@ free_space="$(df . | grep "/dev" | awk '{print $4}')"
 
 if (( $free_space < $unmerged_size ))
 then
-    echo -e "${STREAM_START_RED}ERROR${STREAM_END_COLOR}: Not enough disk space left"
+    echo -e "${STREAM_START_RED}ERROR${STREAM_END_FORMAT}: Not enough disk space left"
 fi
 
 
 # Fail if "merged" directory exists already
-[[ -d "$MERGED_DIR" ]] && { echo -e "${STREAM_START_RED}ERROR${STREAM_END_COLOR}: Seems that the merge directory already exists"; exit 1; }
+[[ -d "$MERGED_DIR" ]] && { echo -e "${STREAM_START_RED}ERROR${STREAM_END_FORMAT}: Seems that the merge directory already exists"; exit 1; }
 
+# To do some logging
+mkdir -p $LOG_DIR
+rm -rf $LOG_DIR/* > /dev/null 2>&1
+echo "===> Find log files in $LOG_DIR"
+echo
 
 # If we are here, things sould be fine
 #mkdir "merged"
@@ -107,7 +184,7 @@ do
     root_files_childs=$(find $c -maxdepth 2 -type f -name "AnalysisResults.root")
     if [[ "$root_files_childs" == "" ]]
     then
-        echo -e "${STREAM_START_YELLOW}WARNING${STREAM_END_COLOR}: No ROOT files found in $c"
+        echo -e "${STREAM_START_YELLOW}WARNING${STREAM_END_FORMAT}: No ROOT files found in $c"
         continue
     fi
     n_packs="0"
@@ -119,7 +196,7 @@ do
         next_size=$(du -s $rfc | awk '{print $1}')
         if (( $next_size > $MAX_ACCEPTED_INPUT_SIZE ))
         then
-            echo -e "${STREAM_START_RED}ERROR${STREAM_END_COLOR}: File $rfc is bigger than $MAX_ACCEPTED_INPUT_SIZE kB. Not accepted..."
+            echo -e "${STREAM_START_RED}ERROR${STREAM_END_FORMAT}: File $rfc is bigger than $MAX_ACCEPTED_INPUT_SIZE kB. Not accepted..."
             exit 1
         fi
 
@@ -132,7 +209,7 @@ do
                 n_big_files=$(( $n_big_files + 1 ))
                 if (( $n_big_files > $MAX_ACCEPTED_BIG_INPUT ))
                 then
-                    echo -e "${STREAM_START_RED}ERROR${STREAM_END_COLOR}: More than $MAX_ACCEPTED_BIG_INPUT big files are not accepted"
+                    echo -e "${STREAM_START_RED}ERROR${STREAM_END_FORMAT}: More than $MAX_ACCEPTED_BIG_INPUT big files are not accepted"
                     exit 1
                 fi
             fi
@@ -145,8 +222,9 @@ do
             current_size=$(( $current_size + $next_size ))
         else
             output_dir="$MERGED_CHILD_DIR/pack_${n_packs}"
-            n_job_delay $N_PACKING_JOBS 20
-            packing $INPUT_PATH/$output_dir "$file_pack" &
+            n_job_delay $N_PACKING_JOBS 10
+            log_file=$LOG_DIR/${c_stripped}_${n_packs}.log
+            packing $INPUT_PATH/$output_dir "$file_pack" $log_file &
             # Need to add that since it would be skipped otherwise
             file_pack="$rfc "
             current_size="$next_size"
@@ -156,12 +234,14 @@ do
 
     # Handle the last pack
     output_dir="$MERGED_CHILD_DIR/pack_${n_packs}"
-    n_job_delay $N_PACKING_JOBS 1
-    packing $INPUT_PATH/$output_dir "$file_pack" &
+    n_job_delay $N_PACKING_JOBS 10
+    log_file=$LOG_DIR/${c_stripped}_${n_packs}.log
+    packing $INPUT_PATH/$output_dir "$file_pack" $log_file &
 
 done
 
-n_job_delay 1 20 
+echo "Wait for all jobs to finish"
+n_job_delay 1 10 
 
 echo "DONE"
 
