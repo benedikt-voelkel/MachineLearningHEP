@@ -44,7 +44,7 @@ def plot1D(histograms, plot_name, output_dir="./", stacked=False):
         if not np.array_equal(h.edges,common_edges):
             logger_string = f"Incompatible edges found in histogram {h.name}"
             logger.fatal(logger_string)
-        ax.bar(bin_centers, h.hist, width=bin_widths, alpha=0.7, label=h.label, bottom=new_bottom)
+        ax.bar(bin_centers, h.hist, width=bin_widths, alpha=0.5, label=h.label, bottom=new_bottom)
         if stacked:
             new_bottom += h.hist
     ax.legend()
@@ -71,9 +71,26 @@ def save_statistics(histograms, output_dir = "./"):
             f.write(f"Histogram label: {h.label}\n")
             f.write(f"Statistics\n")
             f.write(f"Bin name, lower edge, upper edge, weight\n")
+            total_stats = 0
             for s in stats:
                 line = str(s[0]) + " " + str(s[1]) + " " + str(s[2]) + " " + str(s[3]) + "\n"
+                total_stats += s[3]
                 f.write(line)
+            f.write(f"Total stats: {total_stats}\n")
+
+"""
+def pickle_histograms
+
+    logger = get_logger()
+    try:
+        it = iter(histograms)
+    except TypeError as te:
+        histograms = [histograms]
+
+    for h in histograms:
+        output_path = os.path.join(output_dir, h.name + "_stats.pkl")
+"""
+
 
 def process(top_dir, file_signature, recursive, n_files, plot_config, output_dir):
     top_dir = os.path.expanduser(top_dir)
@@ -88,7 +105,7 @@ def process(top_dir, file_signature, recursive, n_files, plot_config, output_dir
 
     root_files = glob.glob(file_signature, recursive=recursive)
     if not root_files:
-        logger_fatal("No ROOT files selected")
+        logger.fatal("No ROOT files selected")
 
     if len(root_files) < n_files:
         logger_string = f"Although {n_files} were requested, could only glob {len(root_files)}"
@@ -142,6 +159,10 @@ def process(top_dir, file_signature, recursive, n_files, plot_config, output_dir
                 for cut in o["cuts"]:
                     if cut is None:
                         values = uproot.open(f)[plot["tree"]].pandas.df(branches=[o["name"]])[o["name"]]
+                        if values.size == 0:
+                            logger_string = f"Tree {plot['tree']} in file {f} seems to be empty"
+                            logger.warning(logger_string)
+                            continue
                         histo_name = o["name"] + "_no_cut"
                         if o["name"] not in histograms:
                             histograms[o["name"]] = {}
@@ -150,6 +171,10 @@ def process(top_dir, file_signature, recursive, n_files, plot_config, output_dir
                         histograms[o["name"]][histo_name].add_values(values)
                     elif plot["tree"] == available_cuts[cut]["tree"]:
                         values = uproot.open(f)[plot["tree"]].pandas.df(branches=[o["name"], *available_cuts[cut]["required_branches"]]).query(available_cuts[cut]["expression"])[o["name"]]
+                        if values.size == 0:
+                            logger_string = f"After cut nothing left from tree {plot['tree']} in file {f} seems to be empty"
+                            logger.warning(logger_string)
+                            continue
                         histo_name = o["name"] + "_" + cut
                         if o["name"] not in histograms:
                             histograms[o["name"]] = {}
@@ -166,6 +191,10 @@ def process(top_dir, file_signature, recursive, n_files, plot_config, output_dir
                             logger_srting = f"Could not find match_branch for trees {plot['tree']} and {available_cuts[cut]['tree']}"
                             logger.fatal(logger_string)
                         match_values = uproot.open(f)[available_cuts[cut]["tree"]].pandas.df(branches=[match_branch, *available_cuts[cut]["required_branches"]]).query(available_cuts[cut]["expression"])[match_branch]
+                        if match_values.size == 0:
+                            logger_string = f"After cut nothing left from tree {available_cuts[cut]['tree']} in file {f} seems to be empty"
+                            logger.warning(logger_string)
+                            continue
                         df_observable = uproot.open(f)[plot["tree"]].pandas.df(branches=[o["name"], match_branch])
                         #values = df_observable.loc[df_observable[prop["match_branch"]].isin(match_values)][prop["observable"]["name"]]
                         values = df_observable.loc[df_observable[match_branch].isin(match_values)][o["name"]]
@@ -177,8 +206,10 @@ def process(top_dir, file_signature, recursive, n_files, plot_config, output_dir
                         histograms[o["name"]][histo_name].add_values(values)
 
     for h_name, histos in histograms.items():
+        xlabel = "xlabel"
+        ylabel = "ylabel"
         histo_list = [ v for v in histos.values() ]
-        plot1D(histo_list, h_name, stacked=True)
+        plot1D(histo_list, h_name, stacked=False, xlabel, ylabel)
         save_statistics(histo_list)
 
     exit(0)

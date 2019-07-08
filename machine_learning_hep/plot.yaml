@@ -8,17 +8,17 @@ cuts:
     tree: PWGHF_TreeCreator/tree_Lc2V0bachelor
     required_branches:
       - pt_cand
-    expression: "pt_cand > 1. and pt_cand < 3."
+    expression: "pt_cand > 2. and pt_cand < 4."
   pt_cand_high:
     tree: PWGHF_TreeCreator/tree_Lc2V0bachelor
     required_branches:
       - pt_cand
-    expression: "pt_cand > 4. and pt_cand < 6."
+    expression: "pt_cand > 8. and pt_cand < 12."
   pt_cand_medium:
     tree: PWGHF_TreeCreator/tree_Lc2V0bachelor
     required_branches:
       - pt_cand
-    expression: "pt_cand > 2. and pt_cand < 5."
+    expression: "pt_cand > 4. and pt_cand < 8."
 
 
 plots:
@@ -31,7 +31,10 @@ plots:
           - pt_cand_low
       - name: n_tracklets
         range: [0,140]
-        bins: 50
+        bins: [0, 10, 20, 40, 60, 80, 100, 140]
+        stacked: true
+        xlabel: n_tracklets
+        ylabel: "#entries"
         cuts:
           - pt_cand_low
           - pt_cand_high
