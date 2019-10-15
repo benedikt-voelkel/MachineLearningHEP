@@ -30,7 +30,7 @@ from machine_learning_hep.utilities import plot_histograms
 
 FILES_NOT_FOUND = []
 # One single particle ratio
-# pylint: disable=too-many-branches, too-many-arguments
+# pylint: disable=too-many-branches, too-many-arguments, too-many-statements
 def plot_hfptspectrum_ml_over_std(case_ml, ana_type_ml, period_number, filepath_std, case_std,
                                   scale_std=None, map_std_bins=None, mult_bin=None,
                                   ml_histo_names=None, std_histo_names=None, suffix=""):
@@ -109,11 +109,16 @@ def plot_hfptspectrum_ml_over_std(case_ml, ana_type_ml, period_number, filepath_
         h_ratio = histo_ml.Clone(f"{histo_ml.GetName()}_ratio")
         h_ratio.Divide(histo_std)
 
-        save_path = f"{folder_plots}/{hn_ml}_ml_std_{case_ml}_over_{case_std}_{suffix}.eps"
+        save_path_plot = f"{folder_plots}/{hn_ml}_ml_std_{case_ml}_over_{case_std}_{suffix}.eps"
+        save_path_root = f"{folder_plots}/{hn_ml}_ml_std_{case_ml}_over_{case_std}_{suffix}.root"
+        save_file = TFile.Open(save_path_root, "RECREATE")
+        save_file.cd()
+        h_ratio.Write()
+        save_file.Close()
 
         plot_histograms([h_ratio], False, False, None, histo_ml.GetTitle(),
                         "#it{p}_{T} (GeV/#it{c}", f"{name} / {case_std}", "",
-                        save_path)
+                        save_path_plot)
 # pylint: disable=import-error, no-name-in-module, unused-import
 # pylint: disable=too-many-statements
 # pylint: disable=too-many-branches
