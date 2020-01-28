@@ -16,60 +16,97 @@
 
 cd "$(dirname "$0")"/..
 
-function swallow() {
-  local ERR=0
-  local TMPF=$(mktemp /tmp/swallow.XXXX)
-  local MSG=$1
-  shift
-  printf "[    ] $MSG" >&2
-  "$@" &> $TMPF || ERR=$?
-  if [[ $ERR != 0 ]]; then
-    printf "\r[\033[31mFAIL\033[m] $MSG (log follows)\n" >&2
-    cat $TMPF
-    printf "\n" >&2
-  else
-    printf "\r[ \033[32mOK\033[m ] $MSG\n" >&2
-  fi
-  rm -f $TMPF
-  return $ERR
+
+function test-dryrun()
+{
+    echo "run test: dryrun"
+    local databases=$(find data -maxdepth 1 -name "database_ml_parameters*")
+    for db in $databases
+    do
+        local has_MBvspt_ntrkl=$(grep "MBvspt_ntrkl:" $db)
+        if [[ "$has_MBvspt_ntrkl" != "" ]]
+        then
+            continue
+        fi
+        python ci/dryrun.py -r submisison/default_complete.yaml -d $db -a MBvspt_ntrkl
+    done
 }
 
-function check_copyright() {
-  local COPYRIGHT="$(cat <<'EOF'
-#############################################################################
-##  © Copyright CERN 2018. All rights not expressly granted are reserved.  ##
-##                 Author: Gian.Michele.Innocenti@cern.ch                  ##
-## This program is free software: you can redistribute it and/or modify it ##
-##  under the terms of the GNU General Public License as published by the  ##
-## Free Software Foundation, either version 3 of the License, or (at your  ##
-## option) any later version. This program is distributed in the hope that ##
-##  it will be useful, but WITHOUT ANY WARRANTY; without even the implied  ##
-##     warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.    ##
-##           See the GNU General Public License for more details.          ##
-##    You should have received a copy of the GNU General Public License    ##
-##   along with this program. if not, see <https://www.gnu.org/licenses/>. ##
-#############################################################################
-EOF
-)"
-  local COPYRIGHT_LINES=$(echo "$COPYRIGHT" | wc -l)
-  [[ "$(head -n$COPYRIGHT_LINES "$1")" == "$COPYRIGHT" ]] || { printf "$1: missing or malformed copyright notice\n"; return 1; }
-  return 0
+
+function test-pylint()
+{
+    local test_files="$@"
+    echo "run test: pylint"
+    type pylint
+    for tf in $test_files; do
+        pylint $tf
+    done
 }
 
-if [[ $TRAVIS_PULL_REQUEST != "false" && $TRAVIS_COMMIT_RANGE ]]; then
-  # Only check changed Python files (snappier)
-  CHANGED_FILES=($(git diff --name-only $TRAVIS_COMMIT_RANGE | grep -E '\.py$' | grep -vE '^setup\.py$' | grep -vE 'analyzer\_jet\.py$|processerDhadrons\_jet\.py$' || true))
-else
-  # Check all Python files
-  CHANGED_FILES=($(find . -name '*.py' -a -not -name setup.py | grep -vE 'analyzer\_jet\.py|processerDhadrons\_jet\.py'))
-fi
 
-ERRCHECK=
-for PY in "${CHANGED_FILES[@]}"; do
-  [[ -e "$PY" ]] || continue
-  ERR=
-  swallow "$PY: linting" pylint "$PY" || ERR=1
-  swallow "$PY: checking copyright notice" check_copyright "$PY" || ERR=1
-  [[ ! $ERR ]] || ERRCHECK="$ERRCHECK $PY"
+function test-all()
+{
+    echo "Run all tests"
+    test-pylint "$1" "$2" "$3"
+    test-dryrun
+}
+
+
+function print-help()
+{
+    echo
+    echo "run_tests.sh usage to run CI tests"
+    echo ""
+    echo "run_tests.sh [<testcase>|all]  # defaults to all"
+    echo ""
+    echo "Possible test cases are:"
+    echo "  style                        # run style tests for copyright and pylint"
+    echo "  dryrun                       # run a dryrun test"
+    echo ""
+    echo "--help|-h                         # Show this message and exit"
+}
+
+
+[[ $# == 0 ]] && test-all
+
+
+FILES_CREATED=""
+FILES_CHANGED=""
+FILES_DELETED=""
+
+DO_PYLINT=""
+DO_DRYRUN=""
+
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+
+        all) test-all ;;
+        pylint) DO_PYLINT="1" ;;
+        dryrun) DO_DRYRUN="1" ;;
+
+        --files-created)
+            shift
+            FILES_CREATED="$1"
+            ;;
+        --files-changed)
+            shift
+            FILES_CHANGED="$1"
+            ;;
+        --files-deleted)
+            shift
+            FILES_DELETED="$1"
+            ;;
+        --help|-h)
+            print-help
+            exit 1
+            ;;
+
+        *)
+            echo "Unknown option $1"
+            print-help
+            exit 2
+            ;;
+    esac
+    shift
 done
-[[ ! $ERRCHECK ]] || { printf "\n\nErrors found in:$ERRCHECK\n" >&2; exit 1; }

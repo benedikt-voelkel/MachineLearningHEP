@@ -1,0 +1,28 @@
+name: Unit test package
+
+on:
+    pull_request:
+        branches:
+            - test-branch
+        paths:
+            - "machine_learning_hep/**/*.py"
+            - "machine_learning_hep/data/database_*"
+    push:
+        branches:
+            - test-branch
+        paths:
+            - "machine_learning_hep/**/*.py"
+            - "machine_learning_hep/data/database_*"
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 6
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Check overall style
+        uses: actions/changed-files@v3
+        run: |
+          ci/run_baseline_tests.sh ${{ env.files_created }} ${{ env.files_updated }}
