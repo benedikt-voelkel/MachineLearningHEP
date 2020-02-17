@@ -24,6 +24,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 
+from sklearn.preprocessing import StandardScaler
 from sklearn.feature_extraction import DictVectorizer
 
 from keras.wrappers.scikit_learn import KerasClassifier
@@ -117,10 +118,18 @@ def getclf_keras(model_config, length_input):
 
 
 
-def fit(names_, classifiers_, x_train_, y_train_):
+def fit(names_, classifiers_, x_train_, y_train_, preprocess_=None, preprocess_kwargs_=None):
     trainedmodels_ = []
-    for _, clf in zip(names_, classifiers_):
-        clf.fit(x_train_, y_train_)
+    if not preprocess_:
+        preprocess_ = [None] * len(names_)
+    if not preprocess_kwargs_:
+        preprocess_kwargs_ = [None] * len(names_)
+
+    for _, clf, pp, pp_kw in zip(names_, classifiers_, preprocess_, preprocess_kwargs_):
+        if not pp_kw:
+            pp_kw = {}
+        x_train_pp = pp(x_train_, **pp_kw) if pp else x_train_
+        clf.fit(x_train_pp, y_train_)
         trainedmodels_.append(clf)
     return trainedmodels_
 
@@ -155,6 +164,39 @@ def apply(ml_type, names_, trainedmodels_, test_set_, mylistvariablestraining_):
             y_test_prob = model.predict_proba(x_values)[:, 1]
             test_set_['y_test_prob'+name] = pd.Series(y_test_prob, index=test_set_.index)
     return test_set_
+
+
+class Preprocessor:
+    def __init__(self):
+        self.is_initialized = False
+        self.raw_data = None
+        self.proc_data = None
+
+    def initialize(self, **kw):
+        pass
+
+    def fit(self, raw_data):
+        self.raw_data = raw_data
+
+    def transform(self, raw_data):
+        pass
+
+
+        
+    
+
+
+
+def normalize_df(raw_df):
+    """Normalize each column
+
+    Args:
+        raw_df: Unscaled dataframe
+    Returns:
+        dataframe with each column normalized
+    """
+    scaler = StandardScaler()
+    return scaler.fit_transform(raw_df.values)
 
 
 def savemodels(names_, trainedmodels_, folder_, suffix_):

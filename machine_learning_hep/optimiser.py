@@ -28,7 +28,7 @@ from ROOT import TFile, TCanvas, TH1F, TF1, gROOT  # pylint: disable=import-erro
 from machine_learning_hep.utilities import seldf_singlevar, split_df_sigbkg, createstringselection
 from machine_learning_hep.utilities import openfile, selectdfquery
 from machine_learning_hep.correlations import vardistplot, scatterplot, correlationmatrix
-from machine_learning_hep.models import getclf_scikit, getclf_xgboost, getclf_keras
+from machine_learning_hep.models import getclf_scikit, getclf_xgboost, getclf_keras, normalize_df
 from machine_learning_hep.models import fit, savemodels, test, apply, decisionboundaries
 from machine_learning_hep.root import write_tree
 from machine_learning_hep.mlperformance import cross_validation_mse, plot_cross_validation_mse
@@ -248,6 +248,9 @@ class Optimiser:
         self.df_xtest = self.df_mltest[self.v_train]
         self.df_ytest = self.df_mltest[self.v_sig]
 
+        # Training data pre-processing
+        self.preprocessors = None
+
     def do_corr(self):
         imageIO_vardist_all = vardistplot(self.df_sigtrain, self.df_bkgtrain,
                                           self.v_all, self.dirmlplot,
@@ -271,16 +274,22 @@ class Optimiser:
                   imageIO_corr_bkg_train
 
     def loadmodels(self):
+        self.preprocessor = []
         classifiers_scikit, names_scikit, _ = getclf_scikit(self.db_model)
+        self.preprocessor.extend([None] * len(names_scikit))
         classifiers_xgboost, names_xgboost, _ = getclf_xgboost(self.db_model)
+        self.preprocessor.extend([None] * len(names_xgboost))
         classifiers_keras, names_keras, _ = getclf_keras(self.db_model, len(self.df_xtrain.columns))
+        #self.preprocessor.extend([normalize_df] * len(names_keras))
+        self.preprocessor.extend([None] * len(names_keras))
         self.p_class = classifiers_scikit+classifiers_xgboost+classifiers_keras
         self.p_classname = names_scikit+names_xgboost+names_keras
 
     def do_train(self):
         self.logger.info("Training")
         t0 = time.time()
-        self.p_trainedmod = fit(self.p_classname, self.p_class, self.df_xtrain, self.df_ytrain)
+        self.p_trainedmod = fit(self.p_classname, self.p_class, self.df_xtrain, self.df_ytrain,
+                                self.preprocessor)
         savemodels(self.p_classname, self.p_trainedmod, self.dirmlout, self.s_suffix)
         self.logger.info("Training over")
         self.logger.info("Time elapsed = %.3f", time.time() - t0)
