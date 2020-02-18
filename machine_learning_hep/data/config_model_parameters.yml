@@ -17,8 +17,8 @@ BinaryClassification:
         - {"n_nodes": 16, "activation": "relu"}
       optimizer: "adam"
       loss: "binary_crossentropy"
-      epochs: 30
-      batch_size: 50
+      epochs: 200
+      batch_size: 128
 
   scikit:
     scikit_random_forest_classifier:
@@ -58,14 +58,14 @@ BinaryClassification:
 #not default parameters
   xgboost:
     xgboost_classifier:
-      activate: True
+      activate: False
       central_params:
         max_depth: 3
         learning_rate: 0.1
-        n_estimators: 850
+        n_estimators: 500
         objective: 'binary:logistic'
         n_jobs: 10
-        gamma: 0.
+        gamma: 0.2
         min_child_weight: 3
         subsample: 0.8
         colsample_bytree: 0.8 

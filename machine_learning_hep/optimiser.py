@@ -24,6 +24,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.utils import shuffle
+from sklearn.preprocessing import StandardScaler
 from ROOT import TFile, TCanvas, TH1F, TF1, gROOT  # pylint: disable=import-error,no-name-in-module
 from machine_learning_hep.utilities import seldf_singlevar, split_df_sigbkg, createstringselection
 from machine_learning_hep.utilities import openfile, selectdfquery
@@ -130,6 +131,8 @@ class Optimiser:
         self.df_ytrain = None
         self.df_xtest = None
         self.df_ytest = None
+        self.df_xtrain_scaled = None
+        self.df_xtest_scaled = None
         #selections
         self.s_selbkgml = data_param["ml"]["sel_bkgml"]
         self.s_selsigml = data_param["ml"]["sel_sigml"]
@@ -175,6 +178,9 @@ class Optimiser:
                 self.f_reco_appliedmc.replace(".pkl", "%s.pkl" % self.s_suffix)
 
         print(training_var)
+        # Training data pre-processing
+        self.preprocessors = None
+
 
     def create_suffix(self):
         string_selection = createstringselection(self.v_bin, self.p_binmin, self.p_binmax)
@@ -248,8 +254,43 @@ class Optimiser:
         self.df_xtest = self.df_mltest[self.v_train]
         self.df_ytest = self.df_mltest[self.v_sig]
 
-        # Training data pre-processing
-        self.preprocessors = None
+        # First find indices where to mask
+        ind_train_mask_tof = self.df_xtrain.index[self.df_xtrain["nsigTOF_Pr_0"] == -999.]
+        ind_train_mask_tpc = self.df_xtrain.index[self.df_xtrain["nsigTPC_Pr_0"] == -999.]
+        ind_test_mask_tof = self.df_xtest.index[self.df_xtest["nsigTOF_Pr_0"] == -999.]
+        ind_test_mask_tpc = self.df_xtest.index[self.df_xtest["nsigTPC_Pr_0"] == -999.]
+
+
+        v_train_no_masking = self.v_train.copy()
+        del v_train_no_masking[v_train_no_masking.index("nsigTOF_Pr_0")]
+        del v_train_no_masking[v_train_no_masking.index("nsigTPC_Pr_0")]
+
+        scaler = StandardScaler()
+        self.df_xtrain_scaled = pd.DataFrame(scaler.fit_transform(self.df_xtrain[v_train_no_masking]), columns=v_train_no_masking)
+        self.df_xtest_scaled = pd.DataFrame(scaler.transform(self.df_xtest[v_train_no_masking]), columns=v_train_no_masking)
+
+        scaler_tof = StandardScaler()
+        scaler_tpc = StandardScaler()
+        scaler_tof.fit(self.df_xtrain[(self.df_xtrain["nsigTOF_Pr_0"] < -999.) | (self.df_xtrain["nsigTOF_Pr_0"] > -999.)][["nsigTOF_Pr_0"]])
+        scaler_tpc.fit(self.df_xtrain[(self.df_xtrain["nsigTPC_Pr_0"] < -999.) | (self.df_xtrain["nsigTPC_Pr_0"] > -999.)][["nsigTPC_Pr_0"]])
+
+        self.df_xtrain_scaled["nsigTOF_Pr_0"] = scaler_tof.transform(self.df_xtrain[["nsigTOF_Pr_0"]])
+        self.df_xtrain_scaled["nsigTPC_Pr_0"] = scaler_tpc.transform(self.df_xtrain[["nsigTPC_Pr_0"]])
+        self.df_xtest_scaled["nsigTOF_Pr_0"] = scaler_tof.transform(self.df_xtest[["nsigTOF_Pr_0"]])
+        self.df_xtest_scaled["nsigTPC_Pr_0"] = scaler_tpc.transform(self.df_xtest[["nsigTPC_Pr_0"]])
+
+        self.df_xtrain_scaled.loc[ind_train_mask_tof, "nsigTOF_Pr_0"] = -999
+        self.df_xtrain_scaled.loc[ind_train_mask_tpc, "nsigTPC_Pr_0"] = -999
+        self.df_xtest_scaled.loc[ind_test_mask_tof, "nsigTOF_Pr_0"] = -999
+        self.df_xtest_scaled.loc[ind_test_mask_tpc, "nsigTPC_Pr_0"] = -999
+
+
+        print("========================= TRAIN =======================")
+        print(self.df_xtrain)
+        print(self.df_xtrain_scaled)
+        print("========================= TEST =======================")
+        print(self.df_xtest)
+        print(self.df_xtest_scaled)
 
     def do_corr(self):
         imageIO_vardist_all = vardistplot(self.df_sigtrain, self.df_bkgtrain,
@@ -288,7 +329,10 @@ class Optimiser:
     def do_train(self):
         self.logger.info("Training")
         t0 = time.time()
-        self.p_trainedmod = fit(self.p_classname, self.p_class, self.df_xtrain, self.df_ytrain,
+        print(self.df_xtrain_scaled)
+        print(self.df_ytrain)
+        #self.p_trainedmod = fit(self.p_classname, self.p_class, self.df_xtrain, self.df_ytrain,
+        self.p_trainedmod = fit(self.p_classname, self.p_class, self.df_xtrain_scaled, self.df_ytrain,
                                 self.preprocessor)
         savemodels(self.p_classname, self.p_trainedmod, self.dirmlout, self.s_suffix)
         self.logger.info("Training over")
@@ -326,8 +370,10 @@ class Optimiser:
                          self.df_xtrain, self.df_ytrain, self.p_nkfolds, self.dirmlplot)
 
     def do_roc_train_test(self):
-        roc_train_test(self.p_classname, self.p_class, self.df_xtrain, self.df_ytrain,
-                       self.df_xtest, self.df_ytest, self.s_suffix, self.dirmlplot)
+        #roc_train_test(self.p_classname, self.p_class, self.df_xtrain, self.df_ytrain,
+        #               self.df_xtest, self.df_ytest, self.s_suffix, self.dirmlplot)
+        roc_train_test(self.p_classname, self.p_class, self.df_xtrain_scaled, self.df_ytrain,
+                       self.df_xtest_scaled, self.df_ytest, self.s_suffix, self.dirmlplot)
 
     def do_plot_model_pred(self):
         plot_overtraining(self.p_classname, self.p_class, self.s_suffix, self.dirmlplot,

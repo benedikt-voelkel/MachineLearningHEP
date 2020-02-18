@@ -12,7 +12,7 @@
 ##   along with this program. if not, see <https://www.gnu.org/licenses/>. ##
 #############################################################################
 
-from keras.layers import Input, Dense, BatchNormalization
+from keras.layers import Input, Dense, BatchNormalization, Masking, Dropout
 from keras.models import Model
 
 def keras_simple_one_layer_binary_classifier(model_config, length_input):
@@ -36,12 +36,14 @@ def keras_simple_two_layer_binary_classifier(model_config, length_input):
     """
     # Create layers
     inputs = Input(shape=(length_input,))
+    layer = Masking(mask_value=-999.)(inputs)
     layer = Dense(model_config["layers"][0]["n_nodes"],
-                  activation=model_config["layers"][0]["activation"])(inputs)
-    layer = BatchNormalization()(layer)
+                  activation=model_config["layers"][0]["activation"])(layer)
+    layer = Dropout(0.5)(layer)
+    #layer = BatchNormalization()(layer)
     layer = Dense(model_config["layers"][1]["n_nodes"],
                   activation=model_config["layers"][1]["activation"])(layer)
-    layer = BatchNormalization()(layer)
+    #layer = BatchNormalization()(layer)
     predictions = Dense(1, activation='sigmoid')(layer)
     # Build model from layers
     model = Model(inputs=inputs, outputs=predictions)
