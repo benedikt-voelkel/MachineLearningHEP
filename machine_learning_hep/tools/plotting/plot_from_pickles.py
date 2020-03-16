@@ -2,7 +2,7 @@ from os.path import join as osjoin
 from os.path import exists as osexists
 from os import makedirs
 import argparse
-import glob
+from glob import glob
 import pickle
 import numpy as np
 import pandas as pd
@@ -27,18 +27,29 @@ def callback(e):
 def parallelizer(function, argument_list, kw_argument_list, maxperchunk):
         chunks_args = [argument_list[x:x+maxperchunk] \
                   for x in range(0, len(argument_list), maxperchunk)]
+        if not kw_argument_list:
+            kw_argument_list = [{} for _ in argument_list]
         chunks_kwargs = [kw_argument_list[x:x+maxperchunk] \
                   for x in range(0, len(kw_argument_list), maxperchunk)]
         res = None
         for chunk_args, chunk_kwargs in zip(chunks_args, chunks_kwargs):
             print("Processing new chunck size=", maxperchunk)
             pool = mp.Pool(10)
+            #res = [pool.apply_async(function, args=args, kwds=kwds, error_callback=callback) for args, kwds in zip(chunk_args, chunk_kwargs)]
             res = [pool.apply_async(function, args=args, kwds=kwds, error_callback=callback) for args, kwds in zip(chunk_args, chunk_kwargs)]
             pool.close()
             pool.join()
 
-        #return [r.get() for r in res]
+        res_list = None
+        try:
+            res_list = [r.get() for r in res]
+        except Exception as e:
+            print("EXCEPTION")
+            pass
+        return res_list
 
+
+        #return
 def print_df_info(df):
     print("Dataframe info")
 
@@ -61,7 +72,7 @@ def save_fig(fig, path):
     fig.savefig(path)
 
 
-def make_2d_plot(df_pkl_path, columns, save_path, queries=None, **kwargs):
+def make_2d_plot(df_input, columns, save_path, queries=None, **kwargs):
     """Make a 2d plot from 2 columns in a dataframe
 
     Args:
@@ -75,7 +86,7 @@ def make_2d_plot(df_pkl_path, columns, save_path, queries=None, **kwargs):
             legend: tuple, legend title per query, if queries == None, str
     """
     
-    LOGGER.info("Read dataframe from %s and save plot to %s", df_pkl_path, save_path)
+    LOGGER.info("Read dataframe from %s and save plot to %s", df_input, save_path)
 
     title = kwargs.pop("title", None)
     legend = kwargs.pop("legend", None)
@@ -84,7 +95,12 @@ def make_2d_plot(df_pkl_path, columns, save_path, queries=None, **kwargs):
     bins = kwargs.pop("bins", (200, 200))
     add_profile = kwargs.pop("add_profile", (False, False))
 
-    df_all = pickle.load(openfile(df_pkl_path, "rb"))
+    df_all = None
+
+    if isinstance(df_input, str):
+        df_all = pickle.load(openfile(df_input, "rb"))
+    else:
+        df_all = df_input
 
     LOGGER.info("Found %i samples in the dataframe", df_all.shape[0])
 
@@ -113,12 +129,12 @@ def make_2d_plot(df_pkl_path, columns, save_path, queries=None, **kwargs):
                 profile_list_std = []
                 for d in data:
                     dnp = np.array(d)
-                    profile_list_mean.append(np.average(np_y_bin_centers, weights=dnp))
-                    profile_list_std.append(sqrt(np.average((np_y_bin_centers - profile_list_mean[-1])**2, weights=dnp)))
-                print(df_pkl_path)
-                if "AnalysisResultsReco12_24_0.30" in df_pkl_path and "2017" in df_pkl_path:
-                    print(profile_list_mean)
-                    print(profile_list_std)
+                    if not np.any(dnp):
+                        profile_list_mean.append(0)
+                        profile_list_std.append(0)
+                    else:
+                        profile_list_mean.append(np.average(np_y_bin_centers, weights=dnp))
+                        profile_list_std.append(sqrt(np.average((np_y_bin_centers - profile_list_mean[-1])**2, weights=dnp)))
                 x_bin_centers = [(xedges[i] + (xedges[i+1] - xedges[i]) / 2.) for i in range(0, len(xedges) - 1)]
                 ax.plot(x_bin_centers, profile_list_mean, color="black")
                 ax.fill_between(x_bin_centers, [m - e for m, e in zip(profile_list_mean, profile_list_std)],
@@ -212,7 +228,33 @@ def make_1d_plot(df_pkl_path, columns, save_path, queries=None, **kwargs):
 
 
 
-database = parse_yaml("/home/bvolkel/HF/MachineLearningHEP/machine_learning_hep/databases/database_ml_parameters_LcpK0spp_test.yml")
+def skim_df(df_pkl_path, columns=None, query=None):
+    """Skim dataframe
+
+    Args:
+        df_pkl_path: path to pickled dataframe
+        columns: tuple with column names to extract
+        save_path: where to asve the plot
+        query: query the dataframe (optional)
+    """
+    
+    #print("Read dataframe from %s", df_pkl_path)
+
+    df = pickle.load(openfile(df_pkl_path, "rb"))
+
+    #print(f"Found {df.shape[0]} samples in the dataframe")
+
+    if query:
+        df = df.query(query)
+
+    if not columns:
+        return df
+
+    return df[columns]
+
+
+#database = parse_yaml("/home/bvolkel/HF/MachineLearningHEP/machine_learning_hep/databases/database_ml_parameters_LcpK0spp_test.yml")
+database = parse_yaml("/home/bvolkel/HF/MachineLearningHEP/machine_learning_hep/data/JetAnalysis/database_ml_parameters_LcpK0spp_20200301.yml")
 database = database[list(database.keys())[0]]
 
 mc_data = ("mc", "data")
@@ -231,6 +273,50 @@ training_variables = database["variables"]["var_training"]
 file_name_base = "AnalysisResultsReco"
 file_name_extension = ".pkl.lz4"
 file_middle = database["var_binning"]
+
+
+########################################
+#
+# V0M percentile
+#
+########################################
+
+save_dir = "plots/v0m_perc"
+if not osexists(save_dir):
+    makedirs(save_dir)
+
+query = "v0m_perc <= 100"
+columns = ["perc_v0m", "v0m_eq_corr"]
+
+
+for case in ("data",):
+    for period, dir_applied in zip(database["multi"][case]["period"], database["multi"][case]["pkl_skimmed"]):
+        args_list = []
+        kwargs_list = []
+        for pt_bin, training_vars in zip(pt_bins[4:5], training_variables[3:]):
+            file_name = f"{file_name_base}_{file_middle}{pt_bin[0]}_{pt_bin[1]}{file_name_extension}"
+
+            print(f"{dir_applied}/**/{file_name}")
+
+            for f in  glob(f"{dir_applied}/**/{file_name}", recursive=True):
+                #args_list.append((f, columns, query))
+                args_list.append((f, columns))
+                #kwargs_list.append({"query": query})
+
+
+            dfs = parallelizer(skim_df, args_list, kwargs_list, 100)
+            print(dfs)
+
+            df_all = pd.concat(dfs)
+
+            save_path = f"{file_name_base}{pt_bin[0]}_{pt_bin[1]}_{case}_{period}_v0m.png"
+            save_path = osjoin(save_dir, save_path)
+            make_2d_plot(df_all, columns, save_path, is_heatmap=True, add_profile=(True, False), bins=(100, 100))
+
+
+exit(0)
+
+
 
 
 ########################################
