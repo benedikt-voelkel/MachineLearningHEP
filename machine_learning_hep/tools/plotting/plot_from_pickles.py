@@ -8,7 +8,9 @@ import numpy as np
 import pandas as pd
 import lz4.frame
 import matplotlib.pyplot as plt
+import matplotlib
 from machine_learning_hep.utilities import openfile
+from machine_learning_hep.bitwise import tag_bit_df
 from machine_learning_hep.io import parse_yaml
 from machine_learning_hep.logger import get_logger
 import multiprocessing as mp
@@ -16,7 +18,8 @@ import sys
 from seaborn import heatmap
 from math import sqrt
 
-
+# If no connection to xserver make sure it doesn't crash
+matplotlib.use('pdf')
 LOGGER = get_logger()
 
 def callback(e):
@@ -254,7 +257,8 @@ def skim_df(df_pkl_path, columns=None, query=None):
 
 
 #database = parse_yaml("/home/bvolkel/HF/MachineLearningHEP/machine_learning_hep/databases/database_ml_parameters_LcpK0spp_test.yml")
-database = parse_yaml("/home/bvolkel/HF/MachineLearningHEP/machine_learning_hep/data/JetAnalysis/database_ml_parameters_LcpK0spp_20200301.yml")
+#database = parse_yaml("/home/bvolkel/HF/MachineLearningHEP/machine_learning_hep/data/JetAnalysis/database_ml_parameters_LcpK0spp_20200301.yml")
+database = parse_yaml("/home/bvolkel/HF/MachineLearningHEP/machine_learning_hep/MBvspt_perc_v0m/database_ml_parameters_D0pp_zg_0304.yml")
 database = database[list(database.keys())[0]]
 
 mc_data = ("mc", "data")
@@ -275,44 +279,74 @@ file_name_extension = ".pkl.lz4"
 file_middle = database["var_binning"]
 
 
+
 ########################################
 #
 # V0M percentile
 #
 ########################################
 
-save_dir = "plots/v0m_perc"
-if not osexists(save_dir):
-    makedirs(save_dir)
 
-query = "v0m_perc <= 100"
-columns = ["perc_v0m", "v0m_eq_corr"]
+#columns = ["pt_cand", "inv_mass"]
+
+pid_vars = ["nsigTPC_Pi_0", "nsigTPC_K_0", "nsigTOF_Pi_0", "nsigTOF_K_0", "nsigTPC_Pi_1", "nsigTPC_K_1", "nsigTOF_Pi_1", "nsigTOF_K_1"]
+
+save_dir_map = {pv: f"plots/{pv}" for pv in pid_vars}
+
+all_columns = pid_vars + ["inv_mass"]
+
+# Create all directories
+for d in save_dir_map.values():
+    if not osexists(d):
+        makedirs(d)
 
 
-for case in ("data",):
+
+
+typean = "MBvspt_perc_v0m"
+b_mcrefl = database["bitmap_sel"]["ismcrefl"]
+v_bitvar = database["bitmap_sel"]["var_name"]
+v_ismcrefl = database["bitmap_sel"]["var_ismcrefl"]
+s_evtsel = database["analysis"][typean]["evtsel"]
+
+for case in ("mc",):
+    s_trigger = database["analysis"][typean]["triggersel"][case]
     for period, dir_applied in zip(database["multi"][case]["period"], database["multi"][case]["pkl_skimmed"]):
         args_list = []
         kwargs_list = []
-        for pt_bin, training_vars in zip(pt_bins[4:5], training_variables[3:]):
+        for pt_bin, training_vars in zip(pt_bins, training_variables):
             file_name = f"{file_name_base}_{file_middle}{pt_bin[0]}_{pt_bin[1]}{file_name_extension}"
 
             print(f"{dir_applied}/**/{file_name}")
 
-            for f in  glob(f"{dir_applied}/**/{file_name}", recursive=True):
-                #args_list.append((f, columns, query))
-                args_list.append((f, columns))
-                #kwargs_list.append({"query": query})
-
-
-            dfs = parallelizer(skim_df, args_list, kwargs_list, 100)
-            print(dfs)
+            dfs = []
+            # Get all dataframes
+            for i, f in  enumerate(glob(f"{dir_applied}/**/{file_name}", recursive=True)):
+                print(f"File: {i+1} at {f}")
+                df = pickle.load(openfile(f, "rb"))
+                if s_evtsel:
+                    df = df.query(s_evtsel)
+                if s_trigger:
+                    df = df.query(s_trigger)
+                df[v_ismcrefl] = np.array(tag_bit_df(df, v_bitvar, b_mcrefl), dtype=int)
+                df = df[df[v_ismcrefl] == 1]
+                df = df[all_columns]
+                dfs.append(df)
 
             df_all = pd.concat(dfs)
 
-            save_path = f"{file_name_base}{pt_bin[0]}_{pt_bin[1]}_{case}_{period}_v0m.png"
-            save_path = osjoin(save_dir, save_path)
-            make_2d_plot(df_all, columns, save_path, is_heatmap=True, add_profile=(True, False), bins=(100, 100))
+            title = f"({s_evtsel}) and ({s_trigger}) and ({v_ismcrefl} == 1)"
+            for pv in pid_vars:
+                columns = [pv, "inv_mass"]
+                suffix = "_vs_".join(columns)
 
+                save_path = f"{file_name_base}{pt_bin[0]}_{pt_bin[1]}_{case}_{period}_{suffix}.png"
+                save_path = osjoin(save_dir_map[pv], save_path)
+                make_2d_plot(df_all, columns, save_path, is_heatmap=True, add_profile=(False, False), bins=(100, 100), title=title)
+
+
+            # Just do first pT bin
+            break
 
 exit(0)
 
