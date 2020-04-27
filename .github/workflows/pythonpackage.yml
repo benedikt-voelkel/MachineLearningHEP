@@ -24,7 +24,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-latest]
         python-version: [3.6]
-        test-tool: [pylint, flake8,pytest]
+        #test-tool: [pylint, flake8, pytest]
+        test-tool: [pylint, pytest]
 
     steps:
       - uses: actions/checkout@v2
