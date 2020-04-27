@@ -24,15 +24,12 @@ cd "$(dirname "$0")"/..
 function test-pylint()
 {
     local test_files=$@
-    local err="0"
     echo "run test: pylint"
     type pylint
     for tf in $test_files; do
         echo "File $tf "
         pylint $tf
-        [[ "$?" != "0" ]] && err="1"
     done
-    return $err
 }
 
 
@@ -65,8 +62,7 @@ function print-help()
     echo "run_tests.sh [<testcase>|all]  # defaults to all"
     echo ""
     echo "Possible test cases are:"
-    echo "  style                        # run style tests for copyright and pylint"
-    echo "  dryrun                       # run a dryrun test"
+    echo "  pylint                        # run style tests for copyright and pylint"
     echo ""
     echo "--help|-h                         # Show this message and exit"
 }
@@ -115,9 +111,7 @@ done
 [[ "$FILES" == "" ]] && { echo "ERROR: No files to test. Exit..."; exit 1; }
 
 
-ERR="0"
 
-echo "Do pylint test"
 
 if [[ "$TESTS" == "" ]]
 then
@@ -126,9 +120,7 @@ else
     for t in $TESTS
     do
         echo "Do test for $t"
-        ERR_TEMP=$(test-case $t $FILES)
-        [[ "$ERR_TEMP" != "0" ]] && ERR="1"
+        test-case $t $FILES
     done
 fi
 
-exit $ERR
