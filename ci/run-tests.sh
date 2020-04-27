@@ -1,7 +1,7 @@
 #!/bin/bash -e
 
 TEST=$1
-set -o pipefail
+#set -o pipefail
 cd "$(dirname "$0")"/..
 
 #############################################################################
@@ -18,18 +18,39 @@ cd "$(dirname "$0")"/..
 ##   along with this program. if not, see <https://www.gnu.org/licenses/>. ##
 #############################################################################
 
+ERR=0
 
+
+function swallow() {
+    local ERR=0
+    local TMPF=$(mktemp /tmp/swallow.XXXX)
+    local MSG=$1
+    shift
+    printf "[    ] $MSG" >&2
+    "$@" &> $TMPF || ERR=$?
+    if [[ $ERR != 0 ]]; then
+        printf "\r[\033[31mFAIL\033[m] $MSG (log follows)\n" >&2
+        cat $TMPF
+        printf "\n" >&2
+    else
+        printf "\r[ \033[32mOK\033[m ] $MSG\n" >&2
+    fi
+    rm -f $TMPF
+    return $ERR
+}
 
 
 function test-pylint()
 {
+    local err=0
     local test_files=$@
     echo "run test: pylint"
     type pylint
     for tf in $test_files; do
         echo "File $tf "
-        pylint $tf
+        swallow "linting $tf" pylint $tf || ERR=1
     done
+
 }
 
 
@@ -124,3 +145,4 @@ else
     done
 fi
 
+exit $ERR
