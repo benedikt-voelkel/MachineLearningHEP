@@ -35,11 +35,11 @@ function swallow() {
     "$@" &> $TMPF || ERR=$?
     if [[ $ERR != 0 ]]; then
         printf "\r[\033[31mFAIL\033[m] $MSG (log follows)\n" >&2
-        cat $TMPF
-        printf "\n" >&2
     else
         printf "\r[ \033[32mOK\033[m ] $MSG\n" >&2
     fi
+    cat $TMPF
+    printf "\n" >&2
     rm -f $TMPF
     return $ERR
 }
