@@ -1,0 +1,77 @@
+name: Unit test package
+
+on:
+    pull_request:
+        branches:
+            - refactory
+              #- master
+              #- ml-dev
+        paths:
+            - "machine_learning_hep/**/*.py"
+            - "machine_learning_hep/data/**/*"
+    push:
+        branches:
+            - refactory
+              #- master
+              #- ml-dev
+        paths:
+            - "machine_learning_hep/**/*.py"
+            - "machine_learning_hep/data/**/*"
+
+jobs:
+  # A baseline test, independent of OS at the moment
+  baseline:
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 6
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Check overall style on pull_request
+        if: github.event_name == 'pull_request'
+        run: |
+          changed_files="$(git diff --name-only ${{ github.base_ref }} ${{ github.ref }} | grep -E '\.py' | grep -vE 'setup.py')"
+          #changed_files="$(git diff --name-only remotes/origin/${{ github.base_ref }} | grep -E '\.py$' | grep -vE 'setup\.py$')"
+          ci/run_baseline_tests.sh $changed_files
+      - name: Check overall style on push
+        if: github.event_name == 'push'
+        run: |
+          changed_files="$(find . -name '*.py' -a -not -name setup.py)"
+          ci/run_baseline_tests.sh $changed_files
+
+  # Build test including python test tools
+  build-os-latest:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      max-parallel: 6
+      matrix:
+        os: [ubuntu-latest, macOS-latest]
+        python-version: [3.6]
+        test-tool: [pylint]
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v1
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Install test tool ${{ matrix.test-tool }}
+        run: |
+          # This branching should be generalised
+          if: contains(${{ matrix.test-tool }}, "pylint")
+          pip install ${{ matrix.test-tool }}
+      - name: Run on pull_request
+        if: github.event_name == 'pull_request'
+        run: |
+          changed_files="$(git diff --name-only ${{ github.base_ref }} ${{ github.ref }} | grep -E '\.py' | grep -vE 'setup.py')"
+          #changed_files="$(git diff --name-only remotes/origin/${{ github.base_ref }} | grep -E '\.py$' | grep -vE 'setup\.py$')"
+          ci/run_tests.sh ${{ matrix.test-tool }} $changed_files
+      - name: Run on push
+        if: github.event_name == 'push'
+        run: |
+          changed_files="$(find . -name '*.py' -a -not -name setup.py)"
+          ci/run_tests.sh ${{ matrix.test-tool }} $changed_files
