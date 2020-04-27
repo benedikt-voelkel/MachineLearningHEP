@@ -1,4 +1,4 @@
-name: Unit test package
+name: Test package
 
 on:
     pull_request:
@@ -17,14 +17,12 @@ on:
             - "machine_learning_hep/data/**/*"
 
 jobs:
-  # Build test including python test tools
   build-os-latest:
     runs-on: ${{ matrix.os }}
     strategy:
       max-parallel: 6
       matrix:
-        os: [ubuntu-latest]
-        #os: [ubuntu-latest, macOS-latest]
+        os: [ubuntu-latest, macOS-latest]
         python-version: [3.6]
         test-tool: [pylint]
 
