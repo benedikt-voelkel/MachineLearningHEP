@@ -54,12 +54,31 @@ function test-pylint()
 }
 
 
+function test-flake8()
+{
+    local err=0
+    local test_files=$@
+    echo "run test: flake8"
+    type flake8
+    for tf in $test_files; do
+        echo "File $tf "
+        swallow "flaking $tf" flake8  $tf --count --select=E9,F63,F7,F82 --show-source --statistics || ERR=1
+        swallow "flaking (treat as warnings) $tf" flake8  $tf --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    done
+
+}
+
+
 function test-case()
 {
     case "$1" in
         pylint)
             shift
             test-pylint $@
+            ;;
+        flake8)
+            shift
+            test-flake8 $@
             ;;
         *)
             echo "Unknown test case $1"
@@ -72,6 +91,7 @@ function test-all()
 {
     echo "Run all tests"
     test-pylint $@
+    test-flake8 $@
 }
 
 
