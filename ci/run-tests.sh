@@ -24,7 +24,7 @@ cd "$(dirname "$0")"/..
 function test-pylint()
 {
     local test_files=$@
-    local err=""
+    local err="0"
     echo "run test: pylint"
     type pylint
     for tf in $test_files; do
@@ -117,13 +117,17 @@ done
 
 ERR="0"
 
+echo "Do pylint test"
+
 if [[ "$TESTS" == "" ]]
 then
     test-all $FILES
 else
     for t in $TESTS
     do
-        ERR=$(test-case $t $FILES)
+        echo "Do test for $t"
+        ERR_TEMP=$(test-case $t $FILES)
+        [[ "$ERR_TEMP" != "0" ]] && ERR="1"
     done
 fi
 
