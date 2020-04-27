@@ -24,12 +24,15 @@ cd "$(dirname "$0")"/..
 function test-pylint()
 {
     local test_files=$@
+    local err=""
     echo "run test: pylint"
     type pylint
     for tf in $test_files; do
         echo "File $tf "
         pylint $tf
+        [[ "$?" != "0" ]] && err="1"
     done
+    return $err
 }
 
 
@@ -112,16 +115,16 @@ done
 [[ "$FILES" == "" ]] && { echo "ERROR: No files to test. Exit..."; exit 1; }
 
 
+ERR="0"
+
 if [[ "$TESTS" == "" ]]
 then
     test-all $FILES
 else
     for t in $TESTS
     do
-        test-case $t $FILES
+        ERR=$(test-case $t $FILES)
     done
 fi
 
-
-
-
+exit $ERR
