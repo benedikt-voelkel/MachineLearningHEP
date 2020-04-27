@@ -41,16 +41,15 @@ EOF
 }
 
 
-FILES_CREATED="$1"
+FILES_CHANGED="$1"
 
 ERR=0
 
-
 # Find only python files
 
-echo "$FILES_CREATED"
+echo "$FILES_CHANGED"
 
-for PY in $FILES_CREATED; do
+for PY in $FILES_CHANGED; do
     check_copyright "$PY" || ERR=1
 done
 exit $ERR
