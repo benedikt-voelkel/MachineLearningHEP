@@ -20,6 +20,11 @@ cd "$(dirname "$0")"/..
 
 ERR=0
 
+function install-package()
+{
+    pip3 install --upgrade --force-reinstall --no-deps -e .
+}
+
 
 function swallow() {
     local ERR=0
@@ -42,7 +47,6 @@ function swallow() {
 
 function test-pylint()
 {
-    local err=0
     local test_files=$@
     echo "run test: pylint"
     type pylint
@@ -50,13 +54,11 @@ function test-pylint()
         echo "File $tf "
         swallow "linting $tf" pylint $tf || ERR=1
     done
-
 }
 
 
 function test-flake8()
 {
-    local err=0
     local test_files=$@
     echo "run test: flake8"
     type flake8
@@ -65,7 +67,15 @@ function test-flake8()
         swallow "flaking $tf" flake8  $tf --count --select=E9,F63,F7,F82 --show-source --statistics || ERR=1
         swallow "flaking (treat as warnings) $tf" flake8  $tf --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     done
+}
 
+
+function test-pytest()
+{
+    install-package
+    echo "run test: pytest"
+    type pytest
+    swallow "pytest ci/pytest" pytest ci/pytest || ERR=1
 }
 
 
@@ -80,6 +90,10 @@ function test-case()
             shift
             test-flake8 $@
             ;;
+        pytest)
+            shift
+            test-pytest
+            ;;
         *)
             echo "Unknown test case $1"
             ;;
@@ -92,6 +106,7 @@ function test-all()
     echo "Run all tests"
     test-pylint $@
     test-flake8 $@
+    test-pytest
 }
 
 
@@ -150,9 +165,6 @@ done
 
 
 [[ "$FILES" == "" ]] && { echo "ERROR: No files to test. Exit..."; exit 1; }
-
-
-
 
 if [[ "$TESTS" == "" ]]
 then
