@@ -18,6 +18,7 @@ main script for doing data processing, machine learning and analysis
 import math
 import array
 import pickle
+import yaml
 import os
 import numpy as np
 import pandas as pd
@@ -31,6 +32,8 @@ from machine_learning_hep.utilities import get_timestamp_string
 #from machine_learning_hep.globalfitter import fitter
 from machine_learning_hep.processer import Processer
 from machine_learning_hep.bitwise import filter_bit_df, tag_bit_df
+from machine_learning_hep.models import apply, applyPreSelCuts, applyTOPOcuts, applyPIDcuts
+
 from machine_learning_hep.validation.validation_vertex import fill_validation_vertex
 from machine_learning_hep.validation.validation_multiplicity import fill_validation_multiplicity
 from machine_learning_hep.validation.validation_candidates import fill_validation_candidates
@@ -56,40 +59,57 @@ class ProcesserDhadrons_mult(Processer): # pylint: disable=too-many-instance-att
         self.p_bin_width = datap["analysis"][self.typean]['bin_width']
         self.p_num_bins = int(round((self.p_mass_fit_lim[1] - self.p_mass_fit_lim[0]) / \
                                     self.p_bin_width))
-        self.l_selml = ["y_test_prob%s>%s" % (self.p_modelname, self.lpt_probcutfin[ipt]) \
-                       for ipt in range(self.p_nptbins)]
+        #self.l_selml = ["y_test_prob%s>%s" % (self.p_modelname, self.lpt_probcutfin[ipt]) \
+        #               for ipt in range(self.p_nptbins)]
+
         self.s_presel_gen_eff = datap["analysis"][self.typean]['presel_gen_eff']
+
         self.lvar2_binmin = datap["analysis"][self.typean]["sel_binmin2"]
         self.lvar2_binmax = datap["analysis"][self.typean]["sel_binmax2"]
         self.v_var2_binning = datap["analysis"][self.typean]["var_binning2"]
         self.v_var2_binning_gen = datap["analysis"][self.typean]["var_binning2_gen"]
         self.corr_eff_mult = datap["analysis"][self.typean]["corrEffMult"]
 
+        self.lpt_finbinmin = datap["analysis"][self.typean]["sel_an_binmin"]
+        self.lpt_finbinmax = datap["analysis"][self.typean]["sel_an_binmax"]
+        self.p_nptfinbins = len(self.lpt_finbinmin)
         self.bin_matching = datap["analysis"][self.typean]["binning_matching"]
         #self.sel_final_fineptbins = datap["analysis"][self.typean]["sel_final_fineptbins"]
+
+        self.finprobcut = datap["analysis"][self.typean]["probcut"]
+        self.l_selml = ["y_test_prob%s>%s" % (self.p_modelname, self.finprobcut[ipt]) \
+                        for ipt in range(self.p_nptfinbins)]
+
         self.s_evtsel = datap["analysis"][self.typean]["evtsel"]
         self.s_trigger = datap["analysis"][self.typean]["triggersel"][self.mcordata]
         self.triggerbit = datap["analysis"][self.typean]["triggerbit"]
         self.runlistrigger = runlisttrigger
+
+        #self.performtriggerturn = datap["analysis"][self.typean].get("performtriggerturn", "")
+        #if "performtriggerturn" not in datap["analysis"][self.typean]:
+        #    self.performtriggerturn = False
         self.event_cand_validation = datap["analysis"][self.typean].get("event_cand_validation", "")
         if "event_cand_validation" not in datap["analysis"][self.typean]:
             self.event_cand_validation = False
+
         self.apply_weights = datap["analysis"][self.typean]["triggersel"]["weighttrig"]
         self.weightfunc = None
+        self.triggerweight_filename = None
+
         if self.apply_weights is True and self.mcordata == "data":
-            filename = os.path.join(self.d_mcreweights, "trigger%s.root" % self.typean)
+            filename = os.path.join(self.d_mcreweights, "trigger%s_new.root" % self.typean)
             if os.path.exists(filename):
+                self.triggerweight_filename = filename
                 weight_file = TFile.Open(filename, "read")
-                self.weightfunc = weight_file.Get("func%s_norm" % self.typean)
+                self.weightfunc = weight_file.Get("funcd%s_ntrkl70_norm" % self.typean)
                 weight_file.Close()
             else:
                 print("trigger correction file", filename, "doesnt exist")
         self.nbinshisto = datap["analysis"][self.typean]["nbinshisto"]
         self.minvaluehisto = datap["analysis"][self.typean]["minvaluehisto"]
         self.maxvaluehisto = datap["analysis"][self.typean]["maxvaluehisto"]
-        self.mass = datap["mass"]
 
-    def gethistonormforselevt_mult(self, df_evt, dfevtevtsel, label, var, weightfunc=None):
+    def gethistonormforselevt_mult(self, df_evt, dfevtevtsel, label, var, weightfunc=None, weighthisto=None):
 
         if weightfunc is not None:
             label = label + "_weight"
@@ -107,13 +127,36 @@ class ProcesserDhadrons_mult(Processer): # pylint: disable=too-many-instance-att
         df_bit_zvtx_gr10 = filter_bit_df(df_to_keep, 'is_ev_rej', [[3], [1, 2, 7, 12]])
         if weightfunc is not None:
             weightssel = evaluate(weightfunc, dfevtevtsel[var])
-            weightsinvsel = [1./weight for weight in weightssel]
+            #weightssel_ = [weighthisto.GetBinContent(weighthisto.FindBin(iw)) for iw in dfevtevtsel[var]]
+            weightssel_ = []
+            for iw in dfevtevtsel[var]:
+                value = weighthisto.GetBinContent(weighthisto.FindBin(iw))
+                if value == 0:
+                    value = 1.
+                weightssel_.append(value)
+            weightsinvsel = [1./weight for weight in weightssel_]
             fill_hist(hSelMult, dfevtevtsel[var], weights=weightsinvsel)
+
             weightsnovtx = evaluate(weightfunc, df_no_vtx[var])
-            weightsinvnovtx = [1./weight for weight in weightsnovtx]
+            #weightsnovtx_ = [weighthisto.GetBinContent(weighthisto.FindBin(iw)) for iw in df_no_vtx[var]]
+            weightsnovtx_ = []
+            for iw in df_no_vtx[var]:
+                value = weighthisto.GetBinContent(weighthisto.FindBin(iw))
+                if value == 0:
+                    value = 1.
+                weightsnovtx_.append(value)
+            weightsinvnovtx = [1./weight for weight in weightsnovtx_]
             fill_hist(hNoVtxMult, df_no_vtx[var], weights=weightsinvnovtx)
+
             weightsgr10 = evaluate(weightfunc, df_bit_zvtx_gr10[var])
-            weightsinvgr10 = [1./weight for weight in weightsgr10]
+            #weightsgr10_ = [weighthisto.GetBinContent(weighthisto.FindBin(iw)) for iw in df_bit_zvtx_gr10[var]]
+            weightsgr10_ = []
+            for iw in df_bit_zvtx_gr10[var]:
+                value = weighthisto.GetBinContent(weighthisto.FindBin(iw))
+                if value == 0:
+                    value = 1.
+                weightsgr10_.append(value)
+            weightsinvgr10 = [1./weight for weight in weightsgr10_]
             fill_hist(hVtxOutMult, df_bit_zvtx_gr10[var], weights=weightsinvgr10)
         else:
             fill_hist(hSelMult, dfevtevtsel[var])
@@ -121,60 +164,60 @@ class ProcesserDhadrons_mult(Processer): # pylint: disable=too-many-instance-att
             fill_hist(hVtxOutMult, df_bit_zvtx_gr10[var])
 
         return hSelMult, hNoVtxMult, hVtxOutMult
-    # pylint: disable=too-many-branches, too-many-locals
+    # pylint: disable=too-many-branches
     def process_histomass_single(self, index):
         myfile = TFile.Open(self.l_histomass[index], "recreate")
         dfevtorig = pickle.load(openfile(self.l_evtorig[index], "rb"))
-        neventsorig = len(dfevtorig)
+
+        if self.docustom is True:
+            with open(self.stdcut_file_path, "r") as stream:
+                try:
+                    stdcut_param = yaml.safe_load(stream)
+                except yaml.YAMLError as exc:
+                    print(exc)
+
+            n_cut = len(self.v_topo_sel)
+            n_bin = len(stdcut_param["pt_binning"]["min"])
+            central_cuts = np.zeros([n_cut, n_bin], dtype=float)
+            ismin_cuts = np.zeros(n_cut, dtype=bool)
+            ptbin_limits = np.array([np.array(stdcut_param["pt_binning"]["min"]), np.array(stdcut_param["pt_binning"]["max"])], dtype=float)
+            for icut, cut in enumerate(self.v_topo_sel):
+                for ibin in range(n_bin):
+                    central_cuts[icut][ibin] = stdcut_param[cut]["value"][ibin]
+                if stdcut_param[cut]["ismin"] is True:
+                    ismin_cuts[icut] = True
+                else:
+                    ismin_cuts[icut] = False
+
         if self.s_trigger is not None:
             dfevtorig = dfevtorig.query(self.s_trigger)
-        neventsaftertrigger = len(dfevtorig)
         if self.runlistrigger is not None:
             dfevtorig = selectdfrunlist(dfevtorig, \
                              self.run_param[self.runlistrigger], "run_number")
-        neventsafterrunsel = len(dfevtorig)
-        dfevtevtsel = dfevtorig.query(self.s_evtsel)
-
-        #validation plot for event selection
-        neventsafterevtsel = len(dfevtevtsel)
-        histonorm = TH1F("histonorm", "histonorm", 10, 0, 10)
-        histonorm.SetBinContent(1, neventsorig)
-        histonorm.GetXaxis().SetBinLabel(1, "tot events")
-        histonorm.SetBinContent(2, neventsaftertrigger)
-        histonorm.GetXaxis().SetBinLabel(2, "tot events after trigger")
-        histonorm.SetBinContent(3, neventsafterrunsel)
-        histonorm.GetXaxis().SetBinLabel(3, "tot events after run sel")
-        histonorm.SetBinContent(4, neventsafterevtsel)
-        histonorm.GetXaxis().SetBinLabel(4, "tot events after evt sel")
-        for ibin2 in range(len(self.lvar2_binmin)):
-            binneddf = seldf_singlevar_inclusive(dfevtevtsel, self.v_var2_binning_gen, \
-                self.lvar2_binmin[ibin2], self.lvar2_binmax[ibin2])
-            histonorm.SetBinContent(5 + ibin2, len(binneddf))
-            histonorm.GetXaxis().SetBinLabel(5 + ibin2, \
-                        "tot events after mult sel %d - %d" % \
-                        (self.lvar2_binmin[ibin2], self.lvar2_binmax[ibin2]))
-        histonorm.Write()
+        dfevtevtsel = dfevtorig.query("is_ev_rej==0")
         labeltrigger = "hbit%svs%s" % (self.triggerbit, self.v_var2_binning_gen)
 
-        myfile.cd()
         hsel, hnovtxmult, hvtxoutmult = \
             self.gethistonormforselevt_mult(dfevtorig, dfevtevtsel, \
                                        labeltrigger, self.v_var2_binning_gen)
 
         if self.apply_weights is True and self.mcordata == "data":
+            weight_file = TFile.Open(self.triggerweight_filename, "read")
+            weight_histo = weight_file.Get("h_ratio_ntrkl70_scaled_D0")
             hselweight, hnovtxmultweight, hvtxoutmultweight = \
                 self.gethistonormforselevt_mult(dfevtorig, dfevtevtsel, \
-                    labeltrigger, self.v_var2_binning_gen, self.weightfunc)
+                    labeltrigger, self.v_var2_binning_gen, self.weightfunc, weight_histo)
+            myfile.cd()
             hselweight.Write()
             hnovtxmultweight.Write()
             hvtxoutmultweight.Write()
 
+        myfile.cd()
         hsel.Write()
         hnovtxmult.Write()
         hvtxoutmult.Write()
 
         list_df_recodtrig = []
-
         for ipt in range(self.p_nptfinbins):
             bin_id = self.bin_matching[ipt]
             df = pickle.load(openfile(self.mptfiles_recoskmldec[bin_id][index], "rb"))
@@ -182,18 +225,45 @@ class ProcesserDhadrons_mult(Processer): # pylint: disable=too-many-instance-att
                 df = df.query(self.s_evtsel)
             if self.s_trigger is not None:
                 df = df.query(self.s_trigger)
-            if self.runlistrigger is not None:
-                df = selectdfrunlist(df, \
-                    self.run_param[self.runlistrigger], "run_number")
-            if self.doml is True:
-                df = df.query(self.l_selml[bin_id])
             list_df_recodtrig.append(df)
+            if self.doml is True:
+                df = df.query(self.l_selml[ipt])
+                # extra TOF PID selection
+                isstd = np.zeros(len(df), dtype=int)
+                pid_array = ["nsigTPC_Pi_0", "nsigTPC_K_0", "nsigTOF_Pi_0", "nsigTOF_K_0",\
+                            "nsigTPC_Pi_1", "nsigTPC_K_1", "nsigTOF_Pi_1", "nsigTOF_K_1",\
+                            "nsigTPC_Pi_2", "nsigTPC_K_2", "nsigTOF_Pi_2","nsigTOF_K_2"]
+                pid_df = df[pid_array].copy()
+                pid_df = pid_df.to_numpy()
+                for icand in range (len (pid_df)):
+                    isselected = np.zeros([3, 2], dtype=bool)
+                    for iprong in range(3):
+                        for ihyp in range(2):
+                            nsigTPC = pid_df[icand][iprong*4+ihyp]
+                            nsigTOF = pid_df[icand][iprong*4+ihyp+2]
+                            if nsigTPC != -999.0 and nsigTOF != -999.0:
+                                if abs(nsigTPC)<3 and abs(nsigTOF)<3:
+                                    isselected[iprong][ihyp] = True
+                            else:
+                                isselected[iprong][ihyp] = True
+                    # Ds candidate selection
+                    if isselected[0][0] == True and isselected[1][1] == True and isselected[2][1] == True:
+                        isstd[icand] = 1
+                    elif isselected[0][1] == True and isselected[1][1] == True and isselected[2][0] == True:
+                        isstd[icand] = 1
+                #df["isstd"] = isstd
+                #df = df.query("isstd == 1")
+            else:
+                if self.docustom is True:
+                    # reset isstd column in database
+                    isstd_array = np.zeros(len(df), dtype=int)
+                    df["isstd"] = isstd_array
+                    # do selection
+                    isstd = applyTOPOcuts(df, ptbin_limits, central_cuts, ismin_cuts, self.v_topo_sel)
+                    df["isstd"] = isstd
+                df = df.query("isstd == 1")
             df = seldf_singlevar(df, self.v_var_binning, \
                                  self.lpt_finbinmin[ipt], self.lpt_finbinmax[ipt])
-
-            if self.do_custom_analysis_cuts:
-                df = self.apply_cuts_ptbin(df, ipt)
-
             for ibin2 in range(len(self.lvar2_binmin)):
                 suffix = "%s%d_%d_%.2f%s_%.2f_%.2f" % \
                          (self.v_var_binning, self.lpt_finbinmin[ipt],
@@ -205,11 +275,24 @@ class ProcesserDhadrons_mult(Processer): # pylint: disable=too-many-instance-att
                                         self.p_mass_fit_lim[0], self.p_mass_fit_lim[1])
                 df_bin = seldf_singlevar_inclusive(df, self.v_var2_binning, \
                                          self.lvar2_binmin[ibin2], self.lvar2_binmax[ibin2])
+                if self.runlistrigger is not None:
+                    df_bin = selectdfrunlist(df_bin, \
+                             self.run_param[self.runlistrigger], "run_number")
                 fill_hist(h_invmass, df_bin.inv_mass)
                 if self.apply_weights is True and self.mcordata == "data":
+                    weight_file = TFile.Open(self.triggerweight_filename, "read")
+                    weight_histo = weight_file.Get("h_ratio_ntrkl70_scaled_D0")
                     weights = evaluate(self.weightfunc, df_bin[self.v_var2_binning_gen])
-                    weightsinv = [1./weight for weight in weights]
+                    #weights_ = [weight_histo.GetBinContent(weight_histo.FindBin(iw)) for iw in df_bin[self.v_var2_binning_gen]]
+                    weights_ = []
+                    for iw in df_bin[self.v_var2_binning_gen]:
+                        value = weight_histo.GetBinContent(weight_histo.FindBin(iw))
+                        if value == 0:
+                            value = 1.
+                        weights_.append(value)
+                    weightsinv = [1./weight for weight in weights_]
                     fill_hist(h_invmass_weight, df_bin.inv_mass, weights=weightsinv)
+
                 myfile.cd()
                 h_invmass.Write()
                 h_invmass_weight.Write()
@@ -231,8 +314,6 @@ class ProcesserDhadrons_mult(Processer): # pylint: disable=too-many-instance-att
 
         if self.event_cand_validation is True:
             df_recodtrig = pd.concat(list_df_recodtrig)
-            df_recodtrig = df_recodtrig.query("inv_mass>%f and inv_mass<%f" % \
-                                              (self.mass - 0.15, self.mass + 0.15))
             dfevtwithd = pd.merge(dfevtevtsel, df_recodtrig, on=self.v_evtmatch)
             label = "h%s" % self.v_var2_binning_gen
             histomult = TH1F(label, label, self.nbinshisto,
@@ -249,9 +330,24 @@ class ProcesserDhadrons_mult(Processer): # pylint: disable=too-many-instance-att
             fill_validation_multiplicity(dfevtorig, dfevtevtsel, df_recodtrig).write()
             fill_validation_candidates(df_recodtrig).write()
             if self.mcordata == "mc":
-                fill_validation_candidates(
-                    df_recodtrig[df_recodtrig[self.v_ismcsignal] == 1], "MC"
-                ).write()
+                fill_validation_candidates(df_recodtrig[df_recodtrig[self.v_ismcsignal] == 1], "MC").write()
+
+    def process_histomass(self):
+        print("Doing masshisto", self.mcordata, self.period)
+        print("Using run selection for mass histo", \
+               self.runlistrigger, "for period", self.period)
+        if self.doml is True:
+            print("Doing ml analysis")
+        else:
+            print("No extra selection needed since we are doing std analysis")
+
+        create_folder_struc(self.d_results, self.l_path)
+        arguments = [(i,) for i in range(len(self.l_root))]
+        self.parallelizer(self.process_histomass_single, arguments, self.p_chunksizeunp)
+        tmp_merged = \
+        f"/data/tmp/hadd/{self.case}_{self.typean}/mass_{self.period}/{get_timestamp_string()}/"
+        mergerootfiles(self.l_histomass, self.n_filemass, tmp_merged)
+
 
     def get_reweighted_count(self, dfsel):
         filename = os.path.join(self.d_mcreweights, self.n_mcreweights)
@@ -268,6 +364,27 @@ class ProcesserDhadrons_mult(Processer): # pylint: disable=too-many-instance-att
     # pylint: disable=line-too-long
     def process_efficiency_single(self, index):
         out_file = TFile.Open(self.l_histoeff[index], "recreate")
+
+        if self.docustom is True:
+            with open(self.stdcut_file_path, "r") as stream:
+                try:
+                    stdcut_param = yaml.safe_load(stream)
+                except yaml.YAMLError as exc:
+                    print(exc)
+
+            n_cut = len(self.v_topo_sel)
+            n_bin = len(stdcut_param["pt_binning"]["min"])
+            central_cuts = np.zeros([n_cut, n_bin], dtype=float)
+            ismin_cuts = np.zeros(n_cut, dtype=bool)
+            ptbin_limits = np.array([np.array(stdcut_param["pt_binning"]["min"]), np.array(stdcut_param["pt_binning"]["max"])], dtype=float)
+            for icut, cut in enumerate(self.v_topo_sel):
+                for ibin in range(n_bin):
+                    central_cuts[icut][ibin] = stdcut_param[cut]["value"][ibin]
+                if stdcut_param[cut]["ismin"] is True:
+                    ismin_cuts[icut] = True
+                else:
+                    ismin_cuts[icut] = False
+
         for ibin2 in range(len(self.lvar2_binmin)):
             stringbin2 = "_%s_%.2f_%.2f" % (self.v_var2_binning_gen, \
                                         self.lvar2_binmin[ibin2], \
@@ -317,16 +434,82 @@ class ProcesserDhadrons_mult(Processer): # pylint: disable=too-many-instance-att
                 df_reco_presel_pr = df_mc_reco[df_mc_reco.ismcprompt == 1]
                 df_reco_sel_pr = None
                 if self.doml is True:
-                    df_reco_sel_pr = df_reco_presel_pr.query(self.l_selml[bin_id])
+                    df_reco_sel_pr = df_reco_presel_pr.query(self.l_selml[ipt])
+                    # extra TOF PID selection
+                    isstd = np.zeros(len(df_reco_sel_pr), dtype=int)
+                    pid_array = ["nsigTPC_Pi_0", "nsigTPC_K_0", "nsigTOF_Pi_0", "nsigTOF_K_0",\
+                            "nsigTPC_Pi_1", "nsigTPC_K_1", "nsigTOF_Pi_1", "nsigTOF_K_1",\
+                            "nsigTPC_Pi_2", "nsigTPC_K_2", "nsigTOF_Pi_2","nsigTOF_K_2"]
+                    pid_df = df_reco_sel_pr[pid_array].copy()
+                    pid_df = pid_df.to_numpy()
+                    for icand in range (len (pid_df)):
+                        isselected = np.zeros([3, 2], dtype=bool)
+                        for iprong in range(3):
+                            for ihyp in range(2):
+                                nsigTPC = pid_df[icand][iprong*4+ihyp]
+                                nsigTOF = pid_df[icand][iprong*4+ihyp+2]
+                                if nsigTPC != -999.0 and nsigTOF != -999.0:
+                                    if abs(nsigTPC)<3 and abs(nsigTOF)<3:
+                                        isselected[iprong][ihyp] = True
+                                else:
+                                    isselected[iprong][ihyp] = True
+                        # Ds candidate selection
+                        if isselected[0][0] == True and isselected[1][1] == True and isselected[2][1] == True:
+                            isstd[icand] = 1
+                        elif isselected[0][1] == True and isselected[1][1] == True and isselected[2][0] == True:
+                            isstd[icand] = 1
+                    #df_reco_sel_pr["isstd"] = isstd
+                    #df_reco_sel_pr = df_reco_sel_pr.query("isstd == 1")
                 else:
-                    df_reco_sel_pr = df_reco_presel_pr.copy()
+                    if self.docustom is True:
+                        # reset isstd column in database
+                        isstd_array = np.zeros(len(df_reco_presel_pr), dtype=int)
+                        df_reco_presel_pr["isstd"] = isstd_array
+                        # do selection
+                        isstd = applyTOPOcuts(df_reco_presel_pr, ptbin_limits, central_cuts, ismin_cuts, self.v_topo_sel)
+                        df_reco_presel_pr["isstd"] = isstd
+                    df_reco_sel_pr = df_reco_presel_pr.query("isstd == 1")
+                    #df_reco_sel_pr = df_reco_presel_pr.copy()
                 df_gen_sel_fd = df_mc_gen[df_mc_gen.ismcfd == 1]
                 df_reco_presel_fd = df_mc_reco[df_mc_reco.ismcfd == 1]
                 df_reco_sel_fd = None
                 if self.doml is True:
-                    df_reco_sel_fd = df_reco_presel_fd.query(self.l_selml[bin_id])
+                    df_reco_sel_fd = df_reco_presel_fd.query(self.l_selml[ipt])
+                    # extra TOF PID selection
+                    isstd = np.zeros(len(df_reco_sel_fd), dtype=int)
+                    pid_array = ["nsigTPC_Pi_0", "nsigTPC_K_0", "nsigTOF_Pi_0", "nsigTOF_K_0",\
+                            "nsigTPC_Pi_1", "nsigTPC_K_1", "nsigTOF_Pi_1", "nsigTOF_K_1",\
+                            "nsigTPC_Pi_2", "nsigTPC_K_2", "nsigTOF_Pi_2","nsigTOF_K_2"]
+                    pid_df = df_reco_sel_fd[pid_array].copy()
+                    pid_df = pid_df.to_numpy()
+                    for icand in range (len (pid_df)):
+                        isselected = np.zeros([3, 2], dtype=bool)
+                        for iprong in range(3):
+                            for ihyp in range(2):
+                                nsigTPC = pid_df[icand][iprong*4+ihyp]
+                                nsigTOF = pid_df[icand][iprong*4+ihyp+2]
+                                if nsigTPC != -999.0 and nsigTOF != -999.0:
+                                    if abs(nsigTPC)<3 and abs(nsigTOF)<3:
+                                        isselected[iprong][ihyp] = True
+                                else:
+                                    isselected[iprong][ihyp] = True
+                        # Ds candidate selection
+                        if isselected[0][0] == True and isselected[1][1] == True and isselected[2][1] == True:
+                            isstd[icand] = 1
+                        elif isselected[0][1] == True and isselected[1][1] == True and isselected[2][0] == True:
+                            isstd[icand] = 1
+                    #df_reco_sel_fd["isstd"] = isstd
+                    #df_reco_sel_fd = df_reco_sel_fd.query("isstd == 1")
                 else:
-                    df_reco_sel_fd = df_reco_presel_fd.copy()
+                    if self.docustom is True:
+                        # reset isstd column in database
+                        isstd_array = np.zeros(len(df_reco_presel_fd), dtype=int)
+                        df_reco_presel_fd["isstd"] = isstd_array
+                        # do selection
+                        isstd = applyTOPOcuts(df_reco_presel_fd, ptbin_limits, central_cuts, ismin_cuts, self.v_topo_sel)
+                        df_reco_presel_fd["isstd"] = isstd
+                    df_reco_sel_fd = df_reco_presel_fd.query("isstd == 1")
+                    #df_reco_sel_fd = df_reco_presel_fd.copy()
 
                 if self.corr_eff_mult[ibin2] is True:
                     val, err = self.get_reweighted_count(df_gen_sel_pr)
