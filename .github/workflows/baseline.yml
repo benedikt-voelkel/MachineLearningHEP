@@ -36,6 +36,7 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           git fetch --no-tags --prune --depth=1 origin +refs/heads/*:refs/remotes/origin/*
-          changed_files="$(git diff --name-only ${{ github.base_ref }} ${{ github.ref }} | grep -E '\.py' | grep -vE 'setup.py')"
+          echo "git diff --name-only ${{ github.base_ref }} ${{ github.ref }} | grep -E '\.py' | grep -vE 'setup.py'"
+          changed_files="$(git diff --name-only origin/${{ github.base_ref }} ${{ github.ref }} | grep -E '\.py' | grep -vE 'setup.py')"
           echo $changed_files
           ci/run-test-copyright.sh $changed_files
