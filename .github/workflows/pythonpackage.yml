@@ -44,6 +44,7 @@ jobs:
       - name: Run on pull_request
         if: github.event_name == 'pull_request'
         run: |
+          git fetch --no-tags --prune --depth=1 origin +refs/heads/*:refs/remotes/origin/*
           changed_files="$(git diff --name-only origin/${{ github.base_ref }} | grep -E '\.py' | grep -vE 'setup.py')"
           ci/run-tests.sh --tests ${{ matrix.test-tool }} --files $changed_files
       - name: Run on push
