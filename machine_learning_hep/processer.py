@@ -63,6 +63,7 @@ class Processer: # pylint: disable=too-many-instance-attributes
         self.p_frac_merge = p_frac_merge
         self.p_rd_merge = p_rd_merge
         self.period = p_period
+        self.i_period = i_period
         self.select_children = datap["multi"][mcordata].get("select_children", None)
         if self.select_children:
             # Make sure we have "<child>/" instead if <child> only. Cause in the latter case
@@ -166,6 +167,9 @@ class Processer: # pylint: disable=too-many-instance-attributes
 
         if self.lpt_probcutfin < self.lpt_probcutpre:
             print("FATAL error: probability cut final must be tighter!")
+
+        self.l_selml = ["y_test_prob%s>%s" % (self.p_modelname, self.lpt_probcutfin[ipt]) \
+                       for ipt in range(self.p_nptbins)]
 
         self.d_pkl_dec = d_pkl_dec
         self.mptfiles_recosk = []

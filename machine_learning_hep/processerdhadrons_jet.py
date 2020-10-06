@@ -165,8 +165,6 @@ class ProcesserDhadrons_jet(Processer): # pylint: disable=invalid-name, too-many
         self.p_bin_width = datap["analysis"][self.typean]["bin_width"]
         self.p_num_bins = int(round((self.p_mass_fit_lim[1] - self.p_mass_fit_lim[0]) / \
                                     self.p_bin_width))
-        self.l_selml = ["y_test_prob%s>%s" % (self.p_modelname, self.lpt_probcutfin[ipt]) \
-                       for ipt in range(self.p_nptbins)]
 
         # first variable (hadron pt)
         self.v_var_binning = datap["var_binning"] # name

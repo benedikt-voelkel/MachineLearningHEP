@@ -246,6 +246,13 @@ class AnalyzerDhadrons_mult(Analyzer): # pylint: disable=invalid-name
         gROOT.SetBatch(tmp_is_root_batch)
 
 
+    def get_efficiency(self, ibin1, ibin2):
+        fileouteff = TFile.Open("%s/efficiencies%s%s.root" % (self.d_resultsallpmc, \
+                                 self.case, self.typean), "read")
+        h = fileouteff.Get(f"eff_mult{ibin2}")
+        return h.GetBinContent(ibin1 + 1), h.GetBinError(ibin1 + 1)
+
+
     def efficiency(self):
         self.loadstyle()
 

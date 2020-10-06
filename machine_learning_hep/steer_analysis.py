@@ -306,8 +306,16 @@ def do_entire_analysis(data_config: dict, data_param: dict, data_param_overwrite
     mymultiprocessdata = MultiProcesser(case, proc_class, data_param[case], typean, run_param,\
                                         "data")
     ana_mgr = AnalyzerManager(ana_class, data_param[case], case, typean, doanaperperiod)
+
+    # Prepare per-period arguments for systemtic
+    processers_mc = mymultiprocessmc.process_listsample
+    processers_data = mymultiprocessdata.process_listsample
+    analyzers = ana_mgr.get_analyzers()
+    args_per_period = [[p_mc, p_data, ana] for p_mc, p_data, ana in zip(analyzers, processers_mc, processers_data)]
+    # no periods-merged processers
+    args_per_period.append([None, None, analyzers[-1]])
     # Has to be done always period-by-period
-    syst_mgr = AnalyzerManager(syst_class, data_param[case], case, typean, True, run_param)
+    syst_mgr = AnalyzerManager(syst_class, data_param[case], case, typean, True, run_param, analyzers[-1], args_per_period=args_per_period)
 
     #perform the analysis flow
     if dodownloadalice == 1:
