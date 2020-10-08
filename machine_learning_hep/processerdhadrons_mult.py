@@ -228,7 +228,7 @@ class ProcesserDhadrons_mult(Processer): # pylint: disable=too-many-instance-att
                 df = selectdfrunlist(df, \
                     self.run_param[self.runlistrigger], "run_number")
             if self.doml is True:
-                df = df.query(self.l_selml[bin_id])
+                df = df.query(self.l_selml[ipt])
             list_df_recodtrig.append(df)
             df = seldf_singlevar(df, self.v_var_binning, \
                                  self.lpt_finbinmin[ipt], self.lpt_finbinmax[ipt])
@@ -239,13 +239,13 @@ class ProcesserDhadrons_mult(Processer): # pylint: disable=too-many-instance-att
             for ibin2 in range(len(self.lvar2_binmin)):
                 suffix = "%s%d_%d_%.2f%s_%.2f_%.2f" % \
                          (self.v_var_binning, self.lpt_finbinmin[ipt],
-                          self.lpt_finbinmax[ipt], self.lpt_probcutfin[bin_id],
+                          self.lpt_finbinmax[ipt], self.lpt_probcutfin[ipt],
                           self.v_var2_binning, self.lvar2_binmin[ibin2], self.lvar2_binmax[ibin2])
                 curr_dir = myfile.mkdir(f"bin1_{ipt}_bin2_{ibin2}")
                 meta_info = create_meta_info(self.v_var_binning, self.lpt_finbinmin[ipt],
                                              self.lpt_finbinmax[ipt], self.v_var2_binning,
                                              self.lvar2_binmin[ibin2], self.lvar2_binmax[ibin2],
-                                             self.lpt_probcutfin[bin_id])
+                                             self.lpt_probcutfin[ipt])
                 write_meta_info(curr_dir, meta_info)
                 h_invmass = TH1F("hmass" + suffix, "", self.p_num_bins,
                                  self.p_mass_fit_lim[0], self.p_mass_fit_lim[1])
@@ -429,14 +429,14 @@ class ProcesserDhadrons_mult(Processer): # pylint: disable=too-many-instance-att
                 df_reco_presel_pr = df_mc_reco[df_mc_reco.ismcprompt == 1]
                 df_reco_sel_pr = None
                 if self.doml is True:
-                    df_reco_sel_pr = df_reco_presel_pr.query(self.l_selml[bin_id])
+                    df_reco_sel_pr = df_reco_presel_pr.query(self.l_selml[ipt])
                 else:
                     df_reco_sel_pr = df_reco_presel_pr.copy()
                 df_gen_sel_fd = df_mc_gen[df_mc_gen.ismcfd == 1]
                 df_reco_presel_fd = df_mc_reco[df_mc_reco.ismcfd == 1]
                 df_reco_sel_fd = None
                 if self.doml is True:
-                    df_reco_sel_fd = df_reco_presel_fd.query(self.l_selml[bin_id])
+                    df_reco_sel_fd = df_reco_presel_fd.query(self.l_selml[ipt])
                 else:
                     df_reco_sel_fd = df_reco_presel_fd.copy()
 

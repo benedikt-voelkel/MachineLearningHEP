@@ -134,11 +134,7 @@ def do_entire_analysis(data_config: dict, data_param: dict, data_param_overwrite
     doplotsval = data_config["analysis"]["doplotsval"]
     doplots = data_config["analysis"]["doplots"]
     dosyst = data_config["analysis"]["dosyst"]
-    dosystprob = data_config["systematics"]["cutvar"]["activate"]
-    do_syst_prob_mass = data_config["systematics"]["cutvar"]["probvariationmass"]
-    do_syst_prob_eff = data_config["systematics"]["cutvar"]["probvariationeff"]
-    do_syst_prob_fit = data_config["systematics"]["cutvar"]["probvariationfit"]
-    do_syst_prob_cross = data_config["systematics"]["cutvar"]["probvariationcross"]
+    do_syst_ml = data_config["systematics"]["cutvar"]
     dosystptshape = data_config["systematics"]["mcptshape"]["activate"]
     doanaperperiod = data_config["analysis"]["doperperiod"]
     typean = data_config["analysis"]["type"]
@@ -311,11 +307,8 @@ def do_entire_analysis(data_config: dict, data_param: dict, data_param_overwrite
     processers_mc = mymultiprocessmc.process_listsample
     processers_data = mymultiprocessdata.process_listsample
     analyzers = ana_mgr.get_analyzers()
-    args_per_period = [[p_mc, p_data, ana] for p_mc, p_data, ana in zip(analyzers, processers_mc, processers_data)]
-    # no periods-merged processers
-    args_per_period.append([None, None, analyzers[-1]])
     # Has to be done always period-by-period
-    syst_mgr = AnalyzerManager(syst_class, data_param[case], case, typean, True, run_param, analyzers[-1], args_per_period=args_per_period)
+    syst_ml_pt = syst_class(data_param[case], case, typean, run_param, analyzers, mymultiprocessmc, mymultiprocessdata)
 
     #perform the analysis flow
     if dodownloadalice == 1:
@@ -442,18 +435,10 @@ def do_entire_analysis(data_config: dict, data_param: dict, data_param_overwrite
     ana_mgr.analyze(*analyze_steps)
 
     ml_syst_steps = []
-    if dosystprob is True:
-        if do_syst_prob_mass:
-            ml_syst_steps.append("ml_cutvar_mass")
-        if do_syst_prob_eff:
-            ml_syst_steps.append("ml_cutvar_eff")
-        if do_syst_prob_fit:
-            ml_syst_steps.append("ml_cutvar_fit")
-        if do_syst_prob_cross:
-            ml_syst_steps.append("ml_cutvar_cross")
+    if do_syst_ml:
+        syst_ml_pt.ml_systematics()
     if dosystptshape is True:
-        ml_syst_steps.append("mcptshape")
-    syst_mgr.analyze(*ml_syst_steps)
+        syst_ml_pt.mcptshape()
 
     # Delete per-period results.
     if clean:
